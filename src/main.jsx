@@ -5,6 +5,9 @@ import "./index.css";
 import App from "./App";
 import PendingProducts from "./pages/PendingProducts";
 import EditProductPending from "./pages/EditProductPending";
+import Users from "./pages/Users";
+import Products from "./pages/Products";
+
 
 const router = createBrowserRouter([
   {
@@ -18,6 +21,14 @@ const router = createBrowserRouter([
   {
     path: "/edit-product-pending/:barcode",
     element: <EditProductPending />,
+  },
+  {
+    path: "/users",
+    element: <Users />,
+  },
+  {
+    path: "/products",
+    element: <Products />,
   },
   {
     path: "*",

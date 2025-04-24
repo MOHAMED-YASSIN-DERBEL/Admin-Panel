@@ -1,5 +1,5 @@
 import { NavLink, Link } from "react-router-dom";
-import { FaBoxArchive, FaCircleUser } from "react-icons/fa6";
+import { FaBoxArchive, FaCircleUser, FaUsers } from "react-icons/fa6";
 
 export default function SideBar() {
   return (
@@ -28,6 +28,38 @@ export default function SideBar() {
                 Produits en attente
               </span>
             </NavLink>
+          </li>
+          <li>
+            <NavLink
+              to="/users"
+              className={({ isActive }) =>
+                `flex items-center px-4 py-3 text-white hover:bg-blue-600 hover:rounded-r-full transition-all duration-300 group ${
+                  isActive ? "bg-blue-600 rounded-r-full shadow-lg" : ""
+                }`
+              }
+            >
+              <FaUsers className="w-6 h-6 group-hover:scale-110 transition-transform duration-300" />
+              <span className="ml-4 text-lg font-medium group-hover:text-[#D4AF37] transition-colors duration-300">
+                Utilisateurs
+              </span>
+            </NavLink>
+       
+          </li>
+          <li>
+            <NavLink
+              to="/products"
+              className={({ isActive }) =>
+                `flex items-center px-4 py-3 text-white hover:bg-blue-600 hover:rounded-r-full transition-all duration-300 group ${
+                  isActive ? "bg-blue-600 rounded-r-full shadow-lg" : ""
+                }`
+              }
+            >
+              <FaUsers className="w-6 h-6 group-hover:scale-110 transition-transform duration-300" />
+              <span className="ml-4 text-lg font-medium group-hover:text-[#D4AF37] transition-colors duration-300">
+                Tous Les Produits
+              </span>
+            </NavLink>
+       
           </li>
         </ul>
       </nav>
