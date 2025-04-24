@@ -33,7 +33,6 @@ export default function Users() {
         const allUsers = [...hanouts, ...suppliers];
         setUsers(allUsers);
 
-        // Debug: Log all user types to verify
         console.log("User types:", allUsers.map((u) => u.type));
 
         setError(null);
@@ -63,7 +62,6 @@ export default function Users() {
       user.email?.toLowerCase().includes(search.toLowerCase()) ||
       user.phoneNumber?.toLowerCase().includes(search.toLowerCase());
 
-    // Debug: Log filter details
     console.log(`FilterType: ${filterType}, User Type: ${user.type}`);
 
     let matchesType;
@@ -78,14 +76,12 @@ export default function Users() {
     return matchesSearch && matchesType;
   });
 
-  // Calculate statistics
   const totalUsers = users.length;
   const hanoutsCount = users.filter((user) => user.type === "Hanout").length;
   const fournisseursCount = users.filter((user) => user.type === "Fournisseur").length;
   const hanoutsPercentage = totalUsers > 0 ? (hanoutsCount / totalUsers) * 100 : 0;
   const fournisseursPercentage = totalUsers > 0 ? (fournisseursCount / totalUsers) * 100 : 0;
 
-  // Calculate strokeDashoffset for circular progress
   const radius = 50;
   const circumference = 2 * Math.PI * radius;
   const hanoutsOffset = circumference - (hanoutsPercentage / 100) * circumference;
@@ -104,10 +100,8 @@ export default function Users() {
           </Link>
         </div>
 
-        {/* Statistics Section */}
         {isFetching ? null : (
           <div className="flex justify-center space-x-12 mb-12">
-            {/* Hanouts Circle */}
             <div className="flex flex-col items-center">
               <div className="relative w-32 h-32">
                 <svg className="w-full h-full" viewBox="0 0 120 120">
@@ -146,7 +140,6 @@ export default function Users() {
               </p>
             </div>
 
-            {/* Fournisseurs Circle */}
             <div className="flex flex-col items-center">
               <div className="relative w-32 h-32">
                 <svg className="w-full h-full" viewBox="0 0 120 120">
