@@ -12,11 +12,22 @@ export default function Products() {
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState("All");
   const [error, setError] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalType, setModalType] = useState(null);
+  const [formData, setFormData] = useState({
+    barcode: "",
+    name: "",
+    description: "",
+    category: "",
+    image: "",
+    status: "approved",
+  });
+  const [formError, setFormError] = useState(null);
 
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        console.log("Fetching Products from:", `${API_URL}/products`);
+        console.log("Fetching Products from:", `${API_URL}/product/find/all/`);
         const productsResponse = await axios.get(`${API_URL}/product/find/all/`);
         const fetchedProducts = productsResponse.data || [];
         setProducts(fetchedProducts);
@@ -80,7 +91,7 @@ export default function Products() {
 
   const radius = 50;
   const circumference = 2 * Math.PI * radius;
-  let startAngle = -90; 
+  let startAngle = -90;
 
   const segments = categoryStats.map((stat, index) => {
     const percentage = stat.percentage;
@@ -109,6 +120,76 @@ export default function Products() {
       percentage: stat.percentage,
     };
   });
+
+  // Modal Handlers
+  const openModal = (type) => {
+    setModalType(type);
+    setFormData({
+      barcode: "",
+      name: "",
+      description: "",
+      category: type === "byWeight" ? "Produit au poids" : "",
+      image: "",
+      status: "approved",
+    });
+    setFormError(null);
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setModalType(null);
+    setFormError(null);
+  };
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    if (modalType === "byWeight" && name === "barcode") {
+      setFormData((prev) => ({
+        ...prev,
+        barcode: value,
+        name: value,
+      }));
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+    }
+  };
+
+  // Validate required fields
+  const isFormValid = () => {
+    const requiredFields = modalType === "regular"
+      ? formData.barcode && formData.name && formData.category && formData.image
+      : formData.barcode && formData.image; // For "Produit au poids", name is set to barcode, category is fixed
+    return requiredFields;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!isFormValid()) {
+      setFormError("Veuillez remplir tous les champs obligatoires (*).");
+      return;
+    }
+    try {
+      const response = await axios.post(`${API_URL}/api/product/`, formData);
+      if (response.status === 201) {
+        const productsResponse = await axios.get(`${API_URL}/product/find/all/`);
+        setProducts(productsResponse.data || []);
+        closeModal();
+      }
+    } catch (error) {
+      console.error("Create Product Error:", error);
+      if (error.response?.status === 409) {
+        setFormError("Ce code-barres existe déjà.");
+      } else if (error.response?.status === 500) {
+        setFormError("Veuillez remplir tous les champs obligatoires (*).");
+      } else {
+        setFormError("Erreur lors de la création du produit.");
+      }
+    }
+  };
 
   return (
     <main className="ml-64 p-8 min-h-screen space-y-8">
@@ -199,7 +280,137 @@ export default function Products() {
               </option>
             ))}
           </select>
+          <button
+            onClick={() => openModal("regular")}
+            className="px-4 py-2 bg-[#1E3A8A] text-white rounded-xl hover:bg-[#D4AF37] transition-all duration-300"
+          >
+            Ajouter Produit
+          </button>
+          <button
+            onClick={() => openModal("byWeight")}
+            className="px-4 py-2 bg-[#3B82F6] text-white rounded-xl hover:bg-[#D4AF37] transition-all duration-300"
+          >
+            Ajouter Produit au Poids
+          </button>
         </section>
+
+        {isModalOpen && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white/90 backdrop-blur-lg rounded-2xl p-8 w-full max-w-md border border-gray-100 shadow-xl">
+              <h2 className="text-2xl font-semibold text-[#1E3A8A] mb-6">
+                {modalType === "byWeight" ? "Ajouter Produit au Poids" : "Ajouter Produit"}
+              </h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-[#1E3A8A] mb-1">
+                    Code-barres *
+                  </label>
+                  <input
+                    type="text"
+                    name="barcode"
+                    value={formData.barcode}
+                    onChange={handleInputChange}
+                    className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-all bg-white/50"
+                    required
+                  />
+                </div>
+                {modalType === "regular" && (
+                  <div>
+                    <label className="block text-sm font-medium text-[#1E3A8A] mb-1">
+                      Nom *
+                    </label>
+                    <input
+                      type="text"
+                      name="name"
+                      value={formData.name}
+                      onChange={handleInputChange}
+                      className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-all bg-white/50"
+                      required
+                    />
+                  </div>
+                )}
+                <div>
+                  <label className="block text-sm font-medium text-[#1E3A8A] mb-1">
+                    Description
+                  </label>
+                  <textarea
+                    name="description"
+                    value={formData.description}
+                    onChange={handleInputChange}
+                    className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-all bg-white/50"
+                    rows="3"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#1E3A8A] mb-1">
+                    Catégorie *
+                  </label>
+                  {modalType === "byWeight" ? (
+                    <input
+                      type="text"
+                      value="Produit au poids"
+                      disabled
+                      className="w-full p-3 border border-gray-200 rounded-xl bg-gray-100 text-gray-600"
+                    />
+                  ) : (
+                    <select
+                      name="category"
+                      value={formData.category}
+                      onChange={handleInputChange}
+                      className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-all bg-white/50"
+                      required
+                    >
+                      <option value="">Sélectionner une catégorie</option>
+                      {categories
+                        .filter((cat) => cat !== "All" && cat !== "Produit au poids")
+                        .map((category) => (
+                          <option key={category} value={category}>
+                            {category}
+                          </option>
+                        ))}
+                    </select>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#1E3A8A] mb-1">
+                    Image URL *
+                  </label>
+                  <input
+                    type="text"
+                    name="image"
+                    value={formData.image}
+                    onChange={handleInputChange}
+                    className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-all bg-white/50"
+                    required
+                  />
+                </div>
+                {formError && (
+                  <p className="text-red-500 text-sm">{formError}</p>
+                )}
+                <div className="flex justify-end gap-3 mt-6">
+                  <button
+                    type="button"
+                    onClick={closeModal}
+                    className="px-4 py-2 bg-gray-300 text-gray-800 rounded-xl hover:bg-gray-400 transition-all duration-300"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    onClick={(e) => handleSubmit(e)}
+                    disabled={!isFormValid()}
+                    className={`px-4 py-2 rounded-xl transition-all duration-300 ${
+                      isFormValid()
+                        ? "bg-[#1E3A8A] text-white hover:bg-[#D4AF37]"
+                        : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                    }`}
+                  >
+                    Ajouter
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {isFetching ? (
           <div className="flex justify-center">
@@ -217,7 +428,6 @@ export default function Products() {
                   <th className="p-4 text-[#1E3A8A] font-semibold">Image</th>
                   <th className="p-4 text-[#1E3A8A] font-semibold">Nom</th>
                   <th className="p-4 text-[#1E3A8A] font-semibold">Code-barres</th>
-                  
                   <th className="p-4 text-[#1E3A8A] font-semibold">Statut</th>
                   <th className="p-4 text-[#1E3A8A] font-semibold">Catégorie</th>
                 </tr>
@@ -234,7 +444,7 @@ export default function Products() {
                           src={product.image}
                           alt={product.name || "Produit"}
                           className="w-12 h-12 object-cover rounded-lg"
-                          onError={(e) => (e.target.src = "https://via.placeholder.com/48?text=N/A")} // Default placeholder image
+                          onError={(e) => (e.target.src = "https://via.placeholder.com/48?text=N/A")}
                         />
                       ) : (
                         <img
@@ -246,7 +456,6 @@ export default function Products() {
                     </td>
                     <td className="p-4 text-gray-800">{product.name || "N/A"}</td>
                     <td className="p-4 text-gray-800">{product.barcode || "N/A"}</td>
-                    
                     <td className="p-4">
                       <span
                         className={`px-3 py-1 rounded-full text-xs font-medium ${
