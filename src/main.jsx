@@ -7,6 +7,7 @@ import PendingProducts from "./pages/PendingProducts";
 import EditProductPending from "./pages/EditProductPending";
 import Users from "./pages/Users";
 import Products from "./pages/Products";
+import FeedbackScreen from "./pages/FeedbackScreen";
 
 
 const router = createBrowserRouter([
@@ -29,6 +30,10 @@ const router = createBrowserRouter([
   {
     path: "/products",
     element: <Products />,
+  },
+  {
+    path: "/feedback",
+    element: <FeedbackScreen />,
   },
   {
     path: "*",

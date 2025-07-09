@@ -2,19 +2,20 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
 import Spinner from "../components/Spinner";
-import { FaHouse, FaUsers } from "react-icons/fa6";
+import { FaHouse, FaUsers, FaCartShopping } from "react-icons/fa6";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
 export default function Users() {
   const [isFetching, setIsFetching] = useState(true);
   const [users, setUsers] = useState([]);
+  const [orders, setOrders] = useState([]);
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("Tous");
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const fetchUsers = async () => {
+    const fetchData = async () => {
       try {
         console.log("Fetching Hanouts from:", `${API_URL}/users`);
         const hanoutsResponse = await axios.get(`${API_URL}/users/`);
@@ -23,12 +24,19 @@ export default function Users() {
           type: "Hanout",
         }));
 
+        console.log("Raw hanouts data:", hanoutsResponse.data);
         console.log("Fetching Fournisseurs from:", `${API_URL}/suppliers`);
         const suppliersResponse = await axios.get(`${API_URL}/suppliers/`);
         const suppliers = (suppliersResponse.data || []).map((supplier) => ({
           ...supplier,
           type: "Fournisseur",
         }));
+
+        console.log("Raw suppliers data:", suppliersResponse.data);
+        console.log("Fetching Orders from:", `${API_URL}/orders/find/`);
+        const ordersResponse = await axios.get(`${API_URL}/orders/find/`);
+        const ordersData = ordersResponse.data || [];
+        setOrders(ordersData);
 
         const allUsers = [...hanouts, ...suppliers];
         setUsers(allUsers);
@@ -46,15 +54,38 @@ export default function Users() {
         setError(
           error.response?.status === 404
             ? "Endpoint non trouvé (404)"
-            : `Erreur lors de la récupération des utilisateurs: ${error.message}`
+            : `Erreur lors de la récupération des données: ${error.message}`
         );
         setIsFetching(false);
       }
     };
 
-    fetchUsers();
+    fetchData();
   }, []);
 
+  const getOrderStats = (supplierId) => {
+    const supplierOrders = orders.filter((order) => order.supplierId === supplierId);
+    const totalOrders = supplierOrders.length;
+
+    const statusCounts = supplierOrders.reduce((acc, order) => {
+      acc[order.status] = (acc[order.status] || 0) + 1;
+      return acc;
+    }, {});
+
+    return { totalOrders, statusCounts };
+  };
+
+  const getGlobalOrderStats = () => {
+    const totalOrders = orders.length;
+    const statusCounts = orders.reduce((acc, order) => {
+      acc[order.status] = (acc[order.status] || 0) + 1;
+      return acc;
+    }, {});
+
+    return { totalOrders, statusCounts };
+  };
+
+  console.log("Current filterType:", filterType);
   const filteredUsers = users.filter((user) => {
     const matchesSearch =
       search === "" ||
@@ -63,12 +94,11 @@ export default function Users() {
       user.phoneNumber?.toLowerCase().includes(search.toLowerCase());
 
     console.log(`FilterType: ${filterType}, User Type: ${user.type}`);
-
     let matchesType;
     if (filterType === "Tous") {
       matchesType = true;
     } else {
-      matchesType = user.type === filterType;
+      matchesType = user.type?.toLowerCase() === filterType.toLowerCase();
     }
 
     console.log(`Matches Type: ${matchesType}`);
@@ -87,15 +117,39 @@ export default function Users() {
   const hanoutsOffset = circumference - (hanoutsPercentage / 100) * circumference;
   const fournisseursOffset = circumference - (fournisseursPercentage / 100) * circumference;
 
+  const globalStats = getGlobalOrderStats();
+
+  const getStatusColor = (status) => {
+    switch (status?.toLowerCase()) {
+      case "pending":
+      case "en_attente":
+        return "bg-yellow-100 text-yellow-800";
+      case "confirmed":
+      case "confirmé":
+        return "bg-green-100 text-green-800";
+      case "delivered":
+      case "livré":
+        return "bg-blue-100 text-blue-800";
+      case "cancelled":
+      case "annulé":
+        return "bg-red-100 text-red-800";
+      default:
+        return "bg-gray-100 text-gray-800";
+    }
+  };
+
   return (
     <main className="w-full flex flex-col items-center px-8 py-10 min-h-screen space-y-8">
-      <div className="w-full max-w-6xl">
+      <div className="w-full max-w-7xl">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-4xl font-semibold text-[#1E3A8A] tracking-tight flex items-center gap-3">
             <FaUsers size={36} />
             Utilisateurs
           </h1>
-          <Link to="/" className="text-[#1E3A8A] hover:text-[#D4AF37] transition-colors duration-300">
+          <Link
+            to="/"
+            className="text-[#1E3A8A] hover:text-[#D4AF37] transition-colors duration-300"
+          >
             <FaHouse size={28} />
           </Link>
         </div>
@@ -190,6 +244,7 @@ export default function Users() {
           <select
             value={filterType}
             onChange={(e) => {
+              console.log("Selected filterType:", e.target.value);
               setFilterType(e.target.value);
             }}
             className="w-1/4 p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-all bg-white/50 backdrop-blur-sm"
@@ -209,41 +264,108 @@ export default function Users() {
         ) : filteredUsers.length === 0 ? (
           <p className="text-gray-500 text-center">Aucun utilisateur trouvé</p>
         ) : (
-          <div className="w-full bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="bg-[#1E3A8A]/10">
-                  <th className="p-4 text-[#1E3A8A] font-semibold">Nom</th>
-                  <th className="p-4 text-[#1E3A8A] font-semibold">Numéro</th>
-                  <th className="p-4 text-[#1E3A8A] font-semibold">Email</th>
-                  <th className="p-4 text-[#1E3A8A] font-semibold">Type</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredUsers.map((user) => (
-                  <tr
-                    key={`${user.type}-${user.id}`}
-                    className="border-t border-gray-200 hover:bg-[#D4AF37]/10 transition-all duration-300"
-                  >
-                    <td className="p-4 text-gray-800">{user.name || "N/A"}</td>
-                    <td className="p-4 text-gray-800">{user.number || "N/A"}</td>
-                    <td className="p-4 text-gray-800">{user.email || "N/A"}</td>
-                    <td className="p-4">
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          user.type === "Fournisseur"
-                            ? "bg-[#D4AF37]/20 text-[#D4AF37]"
-                            : "bg-[#3B82F6]/20 text-[#3B82F6]"
-                        }`}
-                      >
-                        {user.type}
-                      </span>
-                    </td>
+          <>
+            <div className="w-full bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="bg-[#1E3A8A]/10">
+                    <th className="p-4 text-[#1E3A8A] font-semibold">Nom</th>
+                    <th className="p-4 text-[#1E3A8A] font-semibold">Numéro</th>
+                    <th className="p-4 text-[#1E3A8A] font-semibold">Email</th>
+                    <th className="p-4 text-[#1E3A8A] font-semibold">Type</th>
+                    <th className="p-4 text-[#1E3A8A] font-semibold">Commandes</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {filteredUsers.map((user) => {
+                    const orderStats = user.type === "Fournisseur" ? getOrderStats(user.id) : null;
+
+                    return (
+                      <tr
+                        key={`${user.type}-${user.id}`}
+                        className="border-t border-gray-200 hover:bg-[#D4AF37]/10 transition-all duration-300"
+                      >
+                        <td className="p-4 text-gray-800">{user.name || "N/A"}</td>
+                        <td className="p-4 text-gray-800">{user.number || "N/A"}</td>
+                        <td className="p-4 text-gray-800">{user.email || "N/A"}</td>
+                        <td className="p-4">
+                          <span
+                            className={`px-3 py-1 rounded-full text-xs font-medium ${
+                              user.type === "Fournisseur"
+                                ? "bg-[#D4AF37]/20 text-[#D4AF37]"
+                                : "bg-[#3B82F6]/20 text-[#3B82F6]"
+                            }`}
+                          >
+                            {user.type}
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          {user.type === "Fournisseur" && orderStats ? (
+                            <div className="flex flex-col space-y-1">
+                              <div className="flex items-center gap-2">
+                                <FaCartShopping className="text-[#1E3A8A]" size={16} />
+                                <span className="font-semibold text-[#1E3A8A]">
+                                  {orderStats.totalOrders} commandes
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap gap-1">
+                                {Object.entries(orderStats.statusCounts).map(([status, count]) => (
+                                  <span
+                                    key={status}
+                                    className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(
+                                      status
+                                    )}`}
+                                  >
+                                    {status}: {count}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="w-full bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl border border-gray-100 p-6 mt-6">
+              <h2 className="text-2xl font-semibold text-[#1E3A8A] mb-4 flex items-center gap-2">
+                <FaCartShopping />
+                Résumé des Commandes
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-[#1E3A8A]/5 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-[#1E3A8A] mb-2">
+                    Total des Commandes
+                  </h3>
+                  <p className="text-3xl font-bold text-[#D4AF37]">
+                    {globalStats.totalOrders}
+                  </p>
+                </div>
+                <div className="bg-[#D4AF37]/5 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-[#1E3A8A] mb-2">
+                    Répartition par Statut
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(globalStats.statusCounts).map(([status, count]) => (
+                      <span
+                        key={status}
+                        className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(
+                          status
+                        )}`}
+                      >
+                        {status}: {count}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
         )}
       </div>
     </main>

@@ -1,5 +1,5 @@
 import { NavLink, Link } from "react-router-dom";
-import { FaBoxArchive, FaCircleUser, FaUsers } from "react-icons/fa6";
+import { FaBoxArchive, FaCircleUser, FaUsers, FaComment } from "react-icons/fa6";
 
 export default function SideBar() {
   return (
@@ -43,7 +43,6 @@ export default function SideBar() {
                 Utilisateurs
               </span>
             </NavLink>
-       
           </li>
           <li>
             <NavLink
@@ -54,12 +53,26 @@ export default function SideBar() {
                 }`
               }
             >
-              <FaUsers className="w-6 h-6 group-hover:scale-110 transition-transform duration-300" />
+              <FaBoxArchive className="w-6 h-6 group-hover:scale-110 transition-transform duration-300" />
               <span className="ml-4 text-lg font-medium group-hover:text-[#D4AF37] transition-colors duration-300">
                 Tous Les Produits
               </span>
             </NavLink>
-       
+          </li>
+          <li>
+            <NavLink
+              to="/feedback"
+              className={({ isActive }) =>
+                `flex items-center px-4 py-3 text-white hover:bg-blue-600 hover:rounded-r-full transition-all duration-300 group ${
+                  isActive ? "bg-blue-600 rounded-r-full shadow-lg" : ""
+                }`
+              }
+            >
+              <FaComment className="w-6 h-6 group-hover:scale-110 transition-transform duration-300" />
+              <span className="ml-4 text-lg font-medium group-hover:text-[#D4AF37] transition-colors duration-300">
+                Avis
+              </span>
+            </NavLink>
           </li>
         </ul>
       </nav>
