@@ -1,10 +1,17 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
-import Spinner from "../components/Spinner";
-import { FaHouse, FaUsers, FaCartShopping } from "react-icons/fa6";
+import { FaHouse, FaUsers, FaCartShopping, FaChartLine, FaCalendar } from "react-icons/fa6";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+
 
 const API_URL = import.meta.env.VITE_API_URL;
+
+const Spinner = () => (
+  <div className="flex justify-center items-center">
+    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+  </div>
+);
 
 export default function Users() {
   const [isFetching, setIsFetching] = useState(true);
@@ -12,7 +19,9 @@ export default function Users() {
   const [orders, setOrders] = useState([]);
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("Tous");
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [error, setError] = useState(null);
+  const [monthlyStats, setMonthlyStats] = useState([]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -24,7 +33,6 @@ export default function Users() {
           type: "Hanout",
         }));
 
-        console.log("Raw hanouts data:", hanoutsResponse.data);
         console.log("Fetching Fournisseurs from:", `${API_URL}/suppliers`);
         const suppliersResponse = await axios.get(`${API_URL}/suppliers/`);
         const suppliers = (suppliersResponse.data || []).map((supplier) => ({
@@ -32,7 +40,6 @@ export default function Users() {
           type: "Fournisseur",
         }));
 
-        console.log("Raw suppliers data:", suppliersResponse.data);
         console.log("Fetching Orders from:", `${API_URL}/orders/find/`);
         const ordersResponse = await axios.get(`${API_URL}/orders/find/`);
         const ordersData = ordersResponse.data || [];
@@ -41,16 +48,13 @@ export default function Users() {
         const allUsers = [...hanouts, ...suppliers];
         setUsers(allUsers);
 
-        console.log("User types:", allUsers.map((u) => u.type));
+        // Calculate monthly statistics
+        calculateMonthlyStats(ordersData, allUsers);
 
         setError(null);
         setIsFetching(false);
       } catch (error) {
-        console.error("Fetch Error Details:", {
-          message: error.message,
-          code: error.code,
-          response: error.response ? error.response.data : null,
-        });
+        console.error("Fetch Error Details:", error);
         setError(
           error.response?.status === 404
             ? "Endpoint non trouvé (404)"
@@ -62,6 +66,65 @@ export default function Users() {
 
     fetchData();
   }, []);
+
+  const calculateMonthlyStats = (ordersData, allUsers) => {
+    const monthNames = [
+      "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+      "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"
+    ];
+
+    const stats = [];
+    
+    for (let month = 0; month < 12; month++) {
+      const monthData = {
+        month: monthNames[month],
+        monthIndex: month,
+        totalOrders: 0,
+        hanoutOrders: 0,
+        supplierOrders: 0,
+        users: []
+      };
+
+      // Get orders for this month
+      const monthOrders = ordersData.filter(order => {
+        const orderDate = new Date(order.date);
+        return orderDate.getFullYear() === selectedYear && 
+               orderDate.getMonth() === month;
+      });
+
+      monthData.totalOrders = monthOrders.length;
+
+      // Calculate stats for each user
+      allUsers.forEach(user => {
+        let userOrders = 0;
+        
+        if (user.type === "Fournisseur") {
+          userOrders = monthOrders.filter(order => order.supplierId === user.id).length;
+          monthData.supplierOrders += userOrders;
+        } else {
+          userOrders = monthOrders.filter(order => order.userEmail === user.email).length;
+          monthData.hanoutOrders += userOrders;
+        }
+
+        if (userOrders > 0) {
+          monthData.users.push({
+            ...user,
+            orderCount: userOrders
+          });
+        }
+      });
+
+      stats.push(monthData);
+    }
+
+    setMonthlyStats(stats);
+  };
+
+  useEffect(() => {
+    if (orders.length > 0 && users.length > 0) {
+      calculateMonthlyStats(orders, users);
+    }
+  }, [selectedYear, orders, users]);
 
   const getOrderStats = (supplierId) => {
     const supplierOrders = orders.filter((order) => order.supplierId === supplierId);
@@ -75,9 +138,11 @@ export default function Users() {
     return { totalOrders, statusCounts };
   };
 
-  const getGlobalOrderStats = () => {
-    const totalOrders = orders.length;
-    const statusCounts = orders.reduce((acc, order) => {
+  const getHanoutOrderStats = (userEmail) => {
+    const hanoutOrders = orders.filter((order) => order.userEmail === userEmail);
+    const totalOrders = hanoutOrders.length;
+
+    const statusCounts = hanoutOrders.reduce((acc, order) => {
       acc[order.status] = (acc[order.status] || 0) + 1;
       return acc;
     }, {});
@@ -85,7 +150,6 @@ export default function Users() {
     return { totalOrders, statusCounts };
   };
 
-  console.log("Current filterType:", filterType);
   const filteredUsers = users.filter((user) => {
     const matchesSearch =
       search === "" ||
@@ -93,15 +157,12 @@ export default function Users() {
       user.email?.toLowerCase().includes(search.toLowerCase()) ||
       user.phoneNumber?.toLowerCase().includes(search.toLowerCase());
 
-    console.log(`FilterType: ${filterType}, User Type: ${user.type}`);
     let matchesType;
     if (filterType === "Tous") {
       matchesType = true;
     } else {
       matchesType = user.type?.toLowerCase() === filterType.toLowerCase();
     }
-
-    console.log(`Matches Type: ${matchesType}`);
 
     return matchesSearch && matchesType;
   });
@@ -116,8 +177,6 @@ export default function Users() {
   const circumference = 2 * Math.PI * radius;
   const hanoutsOffset = circumference - (hanoutsPercentage / 100) * circumference;
   const fournisseursOffset = circumference - (fournisseursPercentage / 100) * circumference;
-
-  const globalStats = getGlobalOrderStats();
 
   const getStatusColor = (status) => {
     switch (status?.toLowerCase()) {
@@ -138,13 +197,25 @@ export default function Users() {
     }
   };
 
+  const yearOptions = [];
+  for (let year = 2020; year <= new Date().getFullYear(); year++) {
+    yearOptions.push(year);
+  }
+
+  const chartData = monthlyStats.map(stat => ({
+    month: stat.month,
+    "Commandes Hanouts": stat.hanoutOrders,
+    "Commandes Fournisseurs": stat.supplierOrders,
+    "Total": stat.totalOrders
+  }));
+
   return (
     <main className="w-full flex flex-col items-center px-8 py-10 min-h-screen space-y-8">
       <div className="w-full max-w-7xl">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-4xl font-semibold text-[#1E3A8A] tracking-tight flex items-center gap-3">
             <FaUsers size={36} />
-            Utilisateurs
+            Utilisateurs & Statistiques
           </h1>
           <Link
             to="/"
@@ -154,7 +225,24 @@ export default function Users() {
           </Link>
         </div>
 
-        {isFetching ? null : (
+        {/* Year selector */}
+        <div className="flex justify-center mb-8">
+          <div className="flex items-center gap-4 bg-white/80 backdrop-blur-lg rounded-xl shadow-lg p-4">
+            <FaCalendar className="text-[#1E3A8A]" size={20} />
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+              className="p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-all bg-white"
+            >
+              {yearOptions.map(year => (
+                <option key={year} value={year}>{year}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* User type distribution */}
+        {!isFetching && (
           <div className="flex justify-center space-x-12 mb-12">
             <div className="flex flex-col items-center">
               <div className="relative w-32 h-32">
@@ -234,6 +322,47 @@ export default function Users() {
           </div>
         )}
 
+        {/* Monthly Statistics Chart */}
+        {!isFetching && (
+          <div className="w-full bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl border border-gray-100 p-6 mb-8">
+            <h2 className="text-2xl font-semibold text-[#1E3A8A] mb-6 flex items-center gap-2">
+              <FaChartLine />
+              Statistiques Mensuelles {selectedYear}
+            </h2>
+            <ResponsiveContainer width="100%" height={400}>
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Line 
+                  type="monotone" 
+                  dataKey="Commandes Hanouts" 
+                  stroke="#3B82F6" 
+                  strokeWidth={2}
+                  dot={{ fill: "#3B82F6" }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="Commandes Fournisseurs" 
+                  stroke="#D4AF37" 
+                  strokeWidth={2}
+                  dot={{ fill: "#D4AF37" }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="Total" 
+                  stroke="#1E3A8A" 
+                  strokeWidth={2}
+                  dot={{ fill: "#1E3A8A" }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* Search and filter */}
         <section className="w-full flex space-x-4 mb-8">
           <input
             type="text"
@@ -243,10 +372,7 @@ export default function Users() {
           />
           <select
             value={filterType}
-            onChange={(e) => {
-              console.log("Selected filterType:", e.target.value);
-              setFilterType(e.target.value);
-            }}
+            onChange={(e) => setFilterType(e.target.value)}
             className="w-1/4 p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-all bg-white/50 backdrop-blur-sm"
           >
             <option value="Tous">Tous</option>
@@ -278,7 +404,9 @@ export default function Users() {
                 </thead>
                 <tbody>
                   {filteredUsers.map((user) => {
-                    const orderStats = user.type === "Fournisseur" ? getOrderStats(user.id) : null;
+                    const orderStats = user.type === "Fournisseur" 
+                      ? getOrderStats(user.id) 
+                      : getHanoutOrderStats(user.email);
 
                     return (
                       <tr
@@ -300,7 +428,7 @@ export default function Users() {
                           </span>
                         </td>
                         <td className="p-4">
-                          {user.type === "Fournisseur" && orderStats ? (
+                          {orderStats && orderStats.totalOrders > 0 ? (
                             <div className="flex flex-col space-y-1">
                               <div className="flex items-center gap-2">
                                 <FaCartShopping className="text-[#1E3A8A]" size={16} />
@@ -332,36 +460,36 @@ export default function Users() {
               </table>
             </div>
 
+            {/* Global Order Summary */}
             <div className="w-full bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl border border-gray-100 p-6 mt-6">
               <h2 className="text-2xl font-semibold text-[#1E3A8A] mb-4 flex items-center gap-2">
                 <FaCartShopping />
-                Résumé des Commandes
+                Résumé des Commandes {selectedYear}
               </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="bg-[#1E3A8A]/5 rounded-lg p-4">
                   <h3 className="text-lg font-semibold text-[#1E3A8A] mb-2">
                     Total des Commandes
                   </h3>
                   <p className="text-3xl font-bold text-[#D4AF37]">
-                    {globalStats.totalOrders}
+                    {monthlyStats.reduce((sum, month) => sum + month.totalOrders, 0)}
+                  </p>
+                </div>
+                <div className="bg-[#3B82F6]/5 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-[#1E3A8A] mb-2">
+                    Commandes Hanouts
+                  </h3>
+                  <p className="text-3xl font-bold text-[#3B82F6]">
+                    {monthlyStats.reduce((sum, month) => sum + month.hanoutOrders, 0)}
                   </p>
                 </div>
                 <div className="bg-[#D4AF37]/5 rounded-lg p-4">
                   <h3 className="text-lg font-semibold text-[#1E3A8A] mb-2">
-                    Répartition par Statut
+                    Commandes Fournisseurs
                   </h3>
-                  <div className="flex flex-wrap gap-2">
-                    {Object.entries(globalStats.statusCounts).map(([status, count]) => (
-                      <span
-                        key={status}
-                        className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(
-                          status
-                        )}`}
-                      >
-                        {status}: {count}
-                      </span>
-                    ))}
-                  </div>
+                  <p className="text-3xl font-bold text-[#D4AF37]">
+                    {monthlyStats.reduce((sum, month) => sum + month.supplierOrders, 0)}
+                  </p>
                 </div>
               </div>
             </div>
