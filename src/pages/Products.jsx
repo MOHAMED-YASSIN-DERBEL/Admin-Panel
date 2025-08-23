@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import axios from "axios";
-import Spinner from "../components/Spinner";
 import { FaBox, FaHouse } from "react-icons/fa6";
+import Spinner from "../components/Spinner";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -24,106 +23,129 @@ export default function Products() {
   });
   const [formError, setFormError] = useState(null);
 
-  useEffect(() => {
-    const fetchProducts = async () => {
-      try {
-        console.log("Fetching Products from:", `${API_URL}/product/find/all/`);
-        const productsResponse = await axios.get(`${API_URL}/product/find/all/`);
-        const fetchedProducts = productsResponse.data || [];
-        setProducts(fetchedProducts);
-        setError(null);
-        setIsFetching(false);
-      } catch (error) {
-        console.error("Fetch Error Details:", {
-          message: error.message,
-          code: error.code,
-          response: error.response ? error.response.data : null,
-        });
-        setError(
-          error.response?.status === 404
-            ? "Endpoint non trouvé (404)"
-            : `Erreur lors de la récupération des produits: ${error.message}`
-        );
-        setIsFetching(false);
-      }
-    };
+  const token = localStorage.getItem("token");
 
-    fetchProducts();
-  }, []);
+  // Supposons une liste de catégories (à ajuster selon ton backend)
+  const categories = ["All", "Produit au poids", "Électronique", "Vêtements", "Alimentaire"];
 
-  const categories = [
-    "All",
-    ...new Set(
-      products
-        .map((product) => product.category)
-        .filter((category) => category)
-    ),
-  ];
-
-  const filteredProducts = products.filter((product) => {
-    const matchesSearch =
-      search === "" ||
-      (product.barcode &&
-        product.barcode.toLowerCase().includes(search.toLowerCase()));
-
-    const matchesCategory =
-      filterCategory === "All" ||
-      (product.category && product.category === filterCategory);
-
-    return matchesSearch && matchesCategory;
-  });
-
+  // Calcul des segments pour le graphique circulaire
+  const radius = 50;
   const totalProducts = products.length;
-
   const categoryCounts = categories
-    .filter((category) => category !== "All")
+    .filter((cat) => cat !== "All")
     .map((category) => ({
       category,
       count: products.filter((p) => p.category === category).length,
     }));
-
-  const categoryStats = categoryCounts.map((cat) => ({
-    ...cat,
-    percentage: totalProducts > 0 ? (cat.count / totalProducts) * 100 : 0,
-  }));
-
-  const categoryColors = ["#3B82F6", "#D4AF37", "#EF4444", "#10B981", "#8B5CF6", "#F97316"];
-
-  const radius = 50;
-  const circumference = 2 * Math.PI * radius;
-  let startAngle = -90;
-
-  const segments = categoryStats.map((stat, index) => {
-    const percentage = stat.percentage;
-    const sweepAngle = (percentage / 100) * 360;
-    const startX = 60 + radius * Math.cos((startAngle * Math.PI) / 180);
-    const startY = 60 + radius * Math.sin((startAngle * Math.PI) / 180);
-    const endAngle = startAngle + sweepAngle;
-    const endX = 60 + radius * Math.cos((endAngle * Math.PI) / 180);
-    const endY = 60 + radius * Math.sin((endAngle * Math.PI) / 180);
-    const largeArcFlag = sweepAngle > 180 ? 1 : 0;
-
-    const pathD = `
-      M 60,60
-      L ${startX},${startY}
-      A ${radius},${radius} 0 ${largeArcFlag} 1 ${endX},${endY}
-      Z
-    `;
-
-    startAngle = endAngle;
-
+  const segments = categoryCounts.map((cat, index) => {
+    const percentage = totalProducts > 0 ? (cat.count / totalProducts) * 100 : 0;
+    const startAngle = index === 0 ? 0 : categoryCounts.slice(0, index).reduce((sum, c) => sum + (c.count / totalProducts) * 360, 0);
+    const endAngle = startAngle + (cat.count / totalProducts) * 360;
+    const pathD = `M60,60 L60,10 A50,50 0 ${endAngle - startAngle > 180 ? 1 : 0},1 ${
+      60 + radius * Math.cos((endAngle * Math.PI) / 180)
+    },${60 + radius * Math.sin((endAngle * Math.PI) / 180)} A50,50 0 ${
+      endAngle - startAngle > 180 ? 1 : 0
+    },0 60,60`;
     return {
+      category: cat.category,
+      count: cat.count,
+      percentage,
       pathD,
-      color: categoryColors[index % categoryColors.length],
-      category: stat.category,
-      count: stat.count,
-      percentage: stat.percentage,
+      color: ["#3B82F6", "#D4AF37", "#10B981", "#EF4444"][index % 4],
     };
   });
 
-  // Modal Handlers
+  // Filtrage des produits
+  const filteredProducts = products.filter((product) => {
+    const matchesSearch =
+      search === "" || product.barcode?.toLowerCase().includes(search.toLowerCase());
+    const matchesCategory = filterCategory === "All" || product.category === filterCategory;
+    return matchesSearch && matchesCategory;
+  });
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      setIsFetching(true);
+
+
+      if (!token) {
+        setError("Token manquant, veuillez vous reconnecter");
+        setIsFetching(false);
+        console.log("=== END DEBUG ===");
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_URL}/product/find/all/`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        console.log("Response received:");
+        console.log("Status:", response.status);
+        console.log("Status OK:", response.ok);
+        console.log("Headers:", Object.fromEntries(response.headers.entries()));
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.log("Error response body:", errorText);
+          throw new Error(`Erreur HTTP ${response.status}: ${errorText}`);
+        }
+
+        const fetchedProducts = await response.json();
+        console.log("Response data:", fetchedProducts);
+        setProducts(fetchedProducts || []);
+        setError(null);
+      } catch (err) {
+        console.error("=== FETCH ERROR DETAILS ===");
+        console.error("Error type:", err.constructor.name);
+        console.error("Error message:", err.message);
+        console.error("Full error:", err);
+        console.error("Is network error:", err instanceof TypeError && err.message.includes("fetch"));
+
+        if (err instanceof TypeError && err.message.includes("fetch")) {
+          setError("Erreur de connexion au serveur. Vérifiez que le backend est démarré sur " + API_URL);
+        } else if (err.message.includes("401")) {
+          setError("Non autorisé (401). Vérifiez votre token.");
+        } else if (err.message.includes("404")) {
+          setError("Endpoint non trouvé (404).");
+        } else {
+          setError(`Erreur lors de la récupération des produits: ${err.message}`);
+        }
+      } finally {
+        setIsFetching(false);
+        console.log("=== END DEBUG ===");
+      }
+    };
+
+    fetchProducts();
+  }, [token]);
+
+  const isFormValid = () => {
+    return (
+      formData.barcode.trim() !== "" &&
+      (modalType === "regular" ? formData.name.trim() !== "" : true) &&
+      formData.category.trim() !== "" &&
+      formData.image.trim() !== ""
+    );
+  };
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+      category: modalType === "byWeight" ? "Produit au poids" : prev.category,
+    }));
+    setFormError(null);
+  };
+
   const openModal = (type) => {
     setModalType(type);
+    setIsModalOpen(true);
     setFormData({
       barcode: "",
       name: "",
@@ -133,37 +155,20 @@ export default function Products() {
       status: "approved",
     });
     setFormError(null);
-    setIsModalOpen(true);
   };
 
   const closeModal = () => {
     setIsModalOpen(false);
     setModalType(null);
+    setFormData({
+      barcode: "",
+      name: "",
+      description: "",
+      category: "",
+      image: "",
+      status: "approved",
+    });
     setFormError(null);
-  };
-
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    if (modalType === "byWeight" && name === "barcode") {
-      setFormData((prev) => ({
-        ...prev,
-        barcode: value,
-        name: value,
-      }));
-    } else {
-      setFormData((prev) => ({
-        ...prev,
-        [name]: value,
-      }));
-    }
-  };
-
-  // Validate required fields
-  const isFormValid = () => {
-    const requiredFields = modalType === "regular"
-      ? formData.barcode && formData.name && formData.category && formData.image
-      : formData.barcode && formData.image; // For "Produit au poids", name is set to barcode, category is fixed
-    return requiredFields;
   };
 
   const handleSubmit = async (e) => {
@@ -172,22 +177,62 @@ export default function Products() {
       setFormError("Veuillez remplir tous les champs obligatoires (*).");
       return;
     }
+
+   
+
     try {
-      const response = await axios.post(`${API_URL}/api/product/`, formData);
-      if (response.status === 201) {
-        const productsResponse = await axios.get(`${API_URL}/product/find/all/`);
-        setProducts(productsResponse.data || []);
-        closeModal();
+      const response = await fetch(`${API_URL}/product/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(formData),
+      });
+
+
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.log("Error response body:", errorText);
+        throw new Error(`Erreur HTTP ${response.status}: ${errorText}`);
       }
-    } catch (error) {
-      console.error("Create Product Error:", error);
-      if (error.response?.status === 409) {
+
+      // Rafraîchir la liste des produits
+      const productsResponse = await fetch(`${API_URL}/product/find/all`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!productsResponse.ok) {
+        const errorText = await productsResponse.text();
+        throw new Error(`Erreur HTTP ${productsResponse.status}: ${errorText}`);
+      }
+
+      const fetchedProducts = await productsResponse.json();
+      console.log("Refreshed products:", fetchedProducts);
+      setProducts(fetchedProducts || []);
+      closeModal();
+    } catch (err) {
+      console.error("=== FETCH ERROR DETAILS ===");
+      console.error("Error type:", err.constructor.name);
+      console.error("Error message:", err.message);
+      console.error("Full error:", err);
+
+      if (err.message.includes("409")) {
         setFormError("Ce code-barres existe déjà.");
-      } else if (error.response?.status === 500) {
+      } else if (err.message.includes("500")) {
         setFormError("Veuillez remplir tous les champs obligatoires (*).");
+      } else if (err.message.includes("401")) {
+        setFormError("Non autorisé (401). Vérifiez votre token.");
       } else {
-        setFormError("Erreur lors de la création du produit.");
+        setFormError(`Erreur lors de la création du produit: ${err.message}`);
       }
+    } finally {
+      console.log("=== END DEBUG ===");
     }
   };
 
@@ -199,23 +244,17 @@ export default function Products() {
             <FaBox size={36} />
             Produits
           </h1>
-          <Link to="/" className="text-[#1E3A8A] hover:text-[#D4AF37] transition-colors duration-300">
+          <Link to="/home" className="text-[#1E3A8A] hover:text-[#D4AF37] transition-colors duration-300">
             <FaHouse size={28} />
           </Link>
         </div>
 
+     
         {isFetching ? null : (
           <div className="flex flex-col items-center mb-12">
             <div className="relative w-40 h-40">
               <svg className="w-full h-full" viewBox="0 0 120 120">
-                <circle
-                  cx="60"
-                  cy="60"
-                  r={radius}
-                  fill="none"
-                  stroke="#e5e7eb"
-                  strokeWidth="12"
-                />
+                <circle cx="60" cy="60" r={radius} fill="none" stroke="#e5e7eb" strokeWidth="12" />
                 {segments.map((segment, index) => (
                   <path
                     key={index}
@@ -225,12 +264,7 @@ export default function Products() {
                     strokeWidth="1"
                   />
                 ))}
-                <circle
-                  cx="60"
-                  cy="60"
-                  r={radius - 12}
-                  fill="#fff"
-                />
+                <circle cx="60" cy="60" r={radius - 12} fill="#fff" />
                 <text
                   x="60"
                   y="60"
@@ -242,16 +276,11 @@ export default function Products() {
                 </text>
               </svg>
             </div>
-            <p className="mt-2 text-lg font-medium text-[#1E3A8A]">
-              Total Produits
-            </p>
+            <p className="mt-2 text-lg font-medium text-[#1E3A8A]">Total Produits</p>
             <div className="flex flex-wrap justify-center gap-4 mt-4">
               {segments.map((segment, index) => (
                 <div key={index} className="flex items-center gap-2">
-                  <div
-                    className="w-4 h-4 rounded-full"
-                    style={{ backgroundColor: segment.color }}
-                  />
+                  <div className="w-4 h-4 rounded-full" style={{ backgroundColor: segment.color }} />
                   <span className="text-sm text-[#1E3A8A]">
                     {segment.category}: {segment.count} ({segment.percentage.toFixed(1)}%)
                   </span>
@@ -384,9 +413,7 @@ export default function Products() {
                     required
                   />
                 </div>
-                {formError && (
-                  <p className="text-red-500 text-sm">{formError}</p>
-                )}
+                {formError && <p className="text-red-500 text-sm">{formError}</p>}
                 <div className="flex justify-end gap-3 mt-6">
                   <button
                     type="button"
@@ -396,7 +423,7 @@ export default function Products() {
                     Annuler
                   </button>
                   <button
-                    onClick={(e) => handleSubmit(e)}
+                    onClick={handleSubmit}
                     disabled={!isFormValid()}
                     className={`px-4 py-2 rounded-xl transition-all duration-300 ${
                       isFormValid()

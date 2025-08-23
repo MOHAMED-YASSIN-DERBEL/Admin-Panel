@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { createBrowserRouter, RouterProvider } from "react-router-dom";
+import { createBrowserRouter, RouterProvider, Navigate } from "react-router-dom"; // 👈 ajouté Navigate
 import "./index.css";
 import App from "./App";
 import PendingProducts from "./pages/PendingProducts";
@@ -8,11 +8,19 @@ import EditProductPending from "./pages/EditProductPending";
 import Users from "./pages/Users";
 import Products from "./pages/Products";
 import FeedbackScreen from "./pages/FeedbackScreen";
-
+import Login from "./pages/Login";
 
 const router = createBrowserRouter([
   {
     path: "/",
+    element: <Navigate to="/login" />, // redirection vers login
+  },
+  {
+    path: "/login",
+    element: <Login />,
+  },
+  {
+    path: "/home",
     element: <App />,
   },
   {

@@ -8,14 +8,21 @@ const FeedbackScreen = () => {
   const [feedbacks, setFeedbacks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [expandedComments, setExpandedComments] = useState({}); // Track expanded state for each comment
-  const [ratingFilter, setRatingFilter] = useState(null); // null for "All", 1-5 for specific ratings
-  const COMMENT_LIMIT = 100; // Character limit before truncation
+  const [expandedComments, setExpandedComments] = useState({});
+  const [ratingFilter, setRatingFilter] = useState(null);
+  const COMMENT_LIMIT = 100;
+
+  // Récupérer le token depuis localStorage
+  const token = localStorage.getItem("token");
 
   useEffect(() => {
     const fetchFeedbacks = async () => {
       try {
-        const response = await axios.get(`${URL}/feedback`);
+        const response = await axios.get(`${URL}/feedback`, {
+          headers: {
+            Authorization: `Bearer ${token}`, // 👈 token ajouté ici
+          },
+        });
         setFeedbacks(response.data);
         setLoading(false);
       } catch (err) {
@@ -26,9 +33,8 @@ const FeedbackScreen = () => {
     };
 
     fetchFeedbacks();
-  }, []);
+  }, [token]);
 
-  // Toggle expanded state for a specific feedback
   const toggleComment = (feedbackId) => {
     setExpandedComments((prev) => ({
       ...prev,
@@ -36,7 +42,6 @@ const FeedbackScreen = () => {
     }));
   };
 
-  // Render star rating
   const renderStars = (rating) => {
     return (
       <div className="flex">
@@ -50,7 +55,6 @@ const FeedbackScreen = () => {
     );
   };
 
-  // Filter feedbacks based on rating
   const filteredFeedbacks = ratingFilter
     ? feedbacks.filter((feedback) => feedback.rating === ratingFilter)
     : feedbacks;

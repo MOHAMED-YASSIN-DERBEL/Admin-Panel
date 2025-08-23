@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { FaPen, FaHouse } from "react-icons/fa6";
 import { useNavigate, Link } from "react-router-dom";
-import axios from "axios";
 import Spinner from "../components/Spinner";
 import PaginationControls from "../components/PaginationControls";
 
@@ -18,28 +17,53 @@ export default function PendingProducts() {
   const navigate = useNavigate();
 
   useEffect(() => {
-
     const fetchData = async () => {
-      try {
-        const response = await axios.get(`${API_URL}/product/products/pending`, {
-          params: {
-            page: currentPage - 1,
-            size: itemsPerPage,
-            status: "pending",
-          },
-        });
-        console.log("API Response:", response.data);
-        setProducts(response.data.content || []);
-        setTotalPages(response.data.totalPages || 1);
-        setError(null);
+      setIsFetching(true);
+      const token = localStorage.getItem("token");
+      
+
+      
+      if (!token) {
+        setError("Token manquant, veuillez vous reconnecter");
         setIsFetching(false);
-      } catch (error) {
-        console.error("Fetch Error:", error);
-        setError(
-          error.response?.status === 404
-            ? "Endpoint non trouvé (404)"
-            : "Erreur lors de la récupération des produits"
-        );
+        return;
+      }
+
+      const fullUrl = `${API_URL}/product/products/pending?page=${currentPage - 1}&size=${itemsPerPage}&status=pending`;
+   
+      try {
+        
+        const apiRes = await fetch(fullUrl, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`,
+          },
+          
+        });
+
+
+        if (!apiRes.ok) {
+          const errorText = await apiRes.text();
+          console.log("Error response body:", errorText);
+          throw new Error(`Erreur HTTP ${apiRes.status}: ${errorText}`);
+        }
+
+        const data = await apiRes.json();
+  
+        setProducts(data.content || []);
+        setTotalPages(data.totalPages || 1);
+        setError(null);
+      } catch (err) {
+        console.error("Fetch error:", err);
+        
+        // Vérifier si c'est un problème de réseau
+        if (err instanceof TypeError && err.message.includes("fetch")) {
+          setError("Erreur de connexion au serveur. Vérifiez que le backend est démarré sur " + API_URL);
+        } else {
+          setError(`Erreur lors de la récupération des produits: ${err.message}`);
+        }
+      } finally {
         setIsFetching(false);
       }
     };
@@ -61,8 +85,11 @@ export default function PendingProducts() {
           <h1 className="text-4xl font-semibold text-[#1E3A8A] tracking-tight">
             Produits en attente
           </h1>
-          <Link to="/" className="text-[#1E3A8A] hover:text-[#D4AF37] transition-colors duration-300">
-            <FaHouse size={28} /> 
+          <Link
+            to="/home"
+            className="text-[#1E3A8A] hover:text-[#D4AF37] transition-colors duration-300"
+          >
+            <FaHouse size={28} />
           </Link>
         </div>
 
@@ -74,6 +101,8 @@ export default function PendingProducts() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </section>
+
+ 
 
         {isFetching ? (
           <div className="flex justify-center">
@@ -119,7 +148,9 @@ export default function PendingProducts() {
                     )}
                   </div>
                   <button
-                    onClick={() => navigate(`/edit-product-pending/${product.barcode}`)}
+                    onClick={() =>
+                      navigate(`/edit-product-pending/${product.barcode}`)
+                    }
                     className="text-[#1E3A8A] hover:text-[#D4AF37] transition-all duration-300"
                     title="Modifier le produit"
                   >
@@ -130,6 +161,7 @@ export default function PendingProducts() {
             ))}
           </ul>
         )}
+
         <div className="mt-10">
           <PaginationControls
             currentPage={currentPage}
