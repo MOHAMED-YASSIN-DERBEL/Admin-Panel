@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { createBrowserRouter, RouterProvider, Navigate } from "react-router-dom"; // 👈 ajouté Navigate
+import { createBrowserRouter, RouterProvider, Navigate } from "react-router-dom";
 import "./index.css";
 import App from "./App";
 import PendingProducts from "./pages/PendingProducts";
@@ -9,11 +9,12 @@ import Users from "./pages/Users";
 import Products from "./pages/Products";
 import FeedbackScreen from "./pages/FeedbackScreen";
 import Login from "./pages/Login";
+import Partners from "./pages/Partners"; // 👈 Ajout de l'import
 
 const router = createBrowserRouter([
   {
     path: "/",
-    element: <Navigate to="/login" />, // redirection vers login
+    element: <Navigate to="/login" />,
   },
   {
     path: "/login",
@@ -42,6 +43,10 @@ const router = createBrowserRouter([
   {
     path: "/feedback",
     element: <FeedbackScreen />,
+  },
+  {
+    path: "/partners", // 👈 Nouvelle route ajoutée
+    element: <Partners />,
   },
   {
     path: "*",
