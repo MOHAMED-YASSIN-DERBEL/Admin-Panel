@@ -79,7 +79,7 @@ export default function PendingProducts() {
   );
 
   return (
-    <main className="w-full flex flex-col items-center px-8 py-10 min-h-screen space-y-8">
+    <main className="w-full flex flex-col items-center px-4 lg:px-8 py-10 pt-20 min-h-screen space-y-8">
       <div className="w-full max-w-6xl">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-4xl font-semibold text-[#1E3A8A] tracking-tight">

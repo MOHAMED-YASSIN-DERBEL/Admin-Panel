@@ -1,15 +1,19 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import Spinner from "../components/Spinner";
 import { 
   FaHandshake, 
-  FaHouse, 
-  FaCartShopping, 
-  FaLocationDot, 
+  FaHome,
+  FaSearch,
+  FaChartLine,
+  FaTrophy,
+  FaStore,
+  FaEuroSign,
+  FaEye,
+  FaTimes,
   FaPercent,
-  FaChartLine, 
-  FaChartPie 
-} from "react-icons/fa6"; 
+  FaPlus
+} from "react-icons/fa";
+import Spinner from "../components/Spinner";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -18,81 +22,36 @@ export default function Partners() {
   const [partners, setPartners] = useState([]);
   const [search, setSearch] = useState("");
   const [error, setError] = useState(null);
-  const [expandedPartner, setExpandedPartner] = useState(null);
-  const [partnerOrders, setPartnerOrders] = useState({});
-  const [partnerStats, setPartnerStats] = useState({});
-  const [revenueEvolution, setRevenueEvolution] = useState([]);
-  const [monthlyOrders, setMonthlyOrders] = useState([]);
-  const [revenueDistribution, setRevenueDistribution] = useState({ distribution: [], totalRevenue: 0 });
-  const [topPerformers, setTopPerformers] = useState([]);
-  const [orderFilters, setOrderFilters] = useState({
-    supplierId: "",
-    search: "",
-    status: "",
-    minAmount: "",
-    maxAmount: "",
-    startDate: "",
-    sortBy: "createdAt",
-    sortDir: "desc",
-    page: 0,
-    size: 10,
+  const [selectedPartner, setSelectedPartner] = useState(null);
+  const [partnerDetails, setPartnerDetails] = useState({});
+  const [showModal, setShowModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [currentMonth, setCurrentMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [createForm, setCreateForm] = useState({
+    companyName: "",
+    email: "",
+    phoneNumber: "",
+    address: "",
+    password: ""
   });
+  const [createError, setCreateError] = useState(null);
 
   const token = localStorage.getItem("token");
 
   useEffect(() => {
-    const fetchPartners = async () => {
-      setIsFetching(true);
-
-      if (!token) {
-        setError("Token manquant, veuillez vous reconnecter");
-        setIsFetching(false);
-        return;
-      }
-
-      try {
-        const response = await fetch(`${API_URL}/partners/`, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`Erreur HTTP ${response.status}: ${errorText}`);
-        }
-
-        const fetchedPartners = await response.json();
-        setPartners(fetchedPartners || []);
-        setError(null);
-      } catch (err) {
-        if (err instanceof TypeError && err.message.includes("fetch")) {
-          setError("Erreur de connexion au serveur. Vérifiez que le backend est démarré sur " + API_URL);
-        } else if (err.message.includes("401")) {
-          setError("Non autorisé (401). Vérifiez votre token.");
-        } else if (err.message.includes("404")) {
-          setError("Endpoint non trouvé (404).");
-        } else {
-          setError(`Erreur lors de la récupération des partenaires: ${err.message}`);
-        }
-      } finally {
-        setIsFetching(false);
-      }
-    };
-
     fetchPartners();
-  }, [token]);
+  }, [currentMonth]);
 
-  const fetchPartnerData = async (partnerId) => {
+  const fetchPartners = async () => {
+    setIsFetching(true);
     if (!token) {
       setError("Token manquant, veuillez vous reconnecter");
+      setIsFetching(false);
       return;
     }
 
     try {
-      const statsResponse = await fetch(`${API_URL}/partners/orders/${partnerId}/statistics`, {
+      const response = await fetch(`${API_URL}/partners/`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -100,101 +59,127 @@ export default function Partners() {
         },
       });
 
-      if (!statsResponse.ok) {
-        const errorText = await statsResponse.text();
-        throw new Error(`Erreur HTTP ${statsResponse.status}: ${errorText}`);
-      }
+      if (!response.ok) throw new Error(`Erreur HTTP ${response.status}`);
 
-      const stats = await statsResponse.json();
-      // Chaque commande = 1 DT, partenaire prend 10% (0.1 DT par commande)
-      const updatedStats = {
-        ...stats,
-        partnerRevenue: stats.totalOrders ? stats.totalOrders * 0.1 : 0,
-      };
-      setPartnerStats((prev) => ({ ...prev, [partnerId]: updatedStats }));
-
-      const queryParams = new URLSearchParams({
-        page: orderFilters.page.toString(),
-        size: orderFilters.size.toString(),
-        sortBy: orderFilters.sortBy,
-        sortDir: orderFilters.sortDir,
-        ...(orderFilters.supplierId && { supplierId: orderFilters.supplierId }),
-        ...(orderFilters.search && { search: orderFilters.search }),
-        ...(orderFilters.status && { status: orderFilters.status }),
-        ...(orderFilters.minAmount && { minAmount: orderFilters.minAmount }),
-        ...(orderFilters.maxAmount && { maxAmount: orderFilters.maxAmount }),
-        ...(orderFilters.startDate && { startDate: orderFilters.startDate }),
-      });
-
-      const ordersResponse = await fetch(`${API_URL}/partners/orders/${partnerId}?${queryParams}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!ordersResponse.ok) {
-        const errorText = await ordersResponse.text();
-        throw new Error(`Erreur HTTP ${ordersResponse.status}: ${errorText}`);
-      }
-
-      const ordersData = await ordersResponse.json();
-      setPartnerOrders((prev) => ({ ...prev, [partnerId]: ordersData }));
-
-      const analyticsResponse = await fetch(`${API_URL}/partners/analytics/${partnerId}/dashboard`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!analyticsResponse.ok) {
-        const errorText = await analyticsResponse.text();
-        throw new Error(`Erreur HTTP ${analyticsResponse.status}: ${errorText}`);
-      }
-
-      const analyticsData = await analyticsResponse.json();
-      setRevenueEvolution(analyticsData.revenueEvolution?.map(item => ({
-        ...item,
-        revenue: item.orders * 0.1 // 10% de 1 DT par commande
-      })) || []);
-      setMonthlyOrders(analyticsData.monthlyOrders || []);
-      setRevenueDistribution({
-        distribution: analyticsData.revenueDistribution?.distribution?.map(item => ({
-          ...item,
-          revenue: item.orders * 0.1 // 10% de 1 DT par commande
-        })) || [],
-        totalRevenue: analyticsData.revenueDistribution?.totalOrders * 0.1 || 0
-      });
-      setTopPerformers(analyticsData.topPerformers?.map(performer => ({
-        ...performer,
-        revenue: performer.totalOrders * 0.1 // 10% de 1 DT par commande
-      })) || []);
+      const fetchedPartners = await response.json();
+      setPartners(fetchedPartners || []);
+      
+      await Promise.all(
+        fetchedPartners.map(partner => fetchPartnerStatistics(partner.id, currentMonth))
+      );
+      
+      setError(null);
     } catch (err) {
-      setError(`Erreur lors de la récupération des données du partenaire: ${err.message}`);
+      setError(`Erreur: ${err.message}`);
+    } finally {
+      setIsFetching(false);
     }
   };
 
-  const handleFilterChange = (e) => {
-    const { name, value } = e.target;
-    setOrderFilters((prev) => ({
-      ...prev,
-      [name]: value,
-      page: 0,
-    }));
+  const fetchPartnerStatistics = async (partnerId, month) => {
+    try {
+      const [statsRes, analyticsRes] = await Promise.all([
+        fetch(`${API_URL}/partners/orders/${partnerId}/statistics?month=${month}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        fetch(`${API_URL}/partners/analytics/${partnerId}/dashboard`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+      ]);
+
+      if (!statsRes.ok) throw new Error(`Erreur stats HTTP ${statsRes.status}`);
+      if (!analyticsRes.ok) throw new Error(`Erreur analytics HTTP ${analyticsRes.status}`);
+
+      const stats = await statsRes.json();
+      const analytics = await analyticsRes.json();
+        
+      setPartnerDetails(prev => ({
+        ...prev,
+        [partnerId]: {
+          stats,
+          analytics
+        }
+      }));
+    } catch (err) {
+      console.error("Erreur stats:", err);
+      setPartnerDetails(prev => ({
+        ...prev,
+        [partnerId]: {
+          ...prev[partnerId],
+          error: err.message
+        }
+      }));
+    }
   };
 
-  const handlePageChange = (newPage) => {
-    setOrderFilters((prev) => ({ ...prev, page: newPage }));
+  const openPartnerModal = async (partner) => {
+    setSelectedPartner(partner);
+    setShowModal(true);
+    if (!partnerDetails[partner.id]?.suppliers) {
+      await fetchPartnerSuppliers(partner.id, currentMonth);
+    }
   };
 
-  const togglePartner = (partnerId) => {
-    const newExpanded = expandedPartner === partnerId ? null : partnerId;
-    setExpandedPartner(newExpanded);
-    if (newExpanded) {
-      fetchPartnerData(newExpanded);
+  const fetchPartnerSuppliers = async (partnerId, month) => {
+    try {
+      const response = await fetch(`${API_URL}/partners/get-suppliers/${partnerId}?page=0&size=100&month=${month}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      if (!response.ok) throw new Error(`Erreur HTTP ${response.status}`);
+
+      const data = await response.json();
+      setPartnerDetails(prev => ({
+        ...prev,
+        [partnerId]: {
+          ...prev[partnerId],
+          suppliers: data.content || []
+        }
+      }));
+    } catch (err) {
+      console.error("Erreur suppliers:", err);
+      setPartnerDetails(prev => ({
+        ...prev,
+        [partnerId]: {
+          ...prev[partnerId],
+          suppliersError: err.message
+        }
+      }));
+    }
+  };
+
+  const handleCreateSubmit = async (e) => {
+    e.preventDefault();
+    setCreateError(null);
+
+    try {
+      const response = await fetch(`${API_URL}/auth/partner/register`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(createForm)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || `Erreur HTTP ${response.status}`);
+      }
+
+      const newPartner = await response.json();
+      setPartners(prev => [...prev, newPartner.partner]);
+      setShowCreateModal(false);
+      setCreateForm({
+        companyName: "",
+        email: "",
+        phoneNumber: "",
+        address: "",
+        password: ""
+      });
+      await fetchPartnerStatistics(newPartner.partner.id, currentMonth);
+    } catch (err) {
+      setCreateError(`Erreur: ${err.message}`);
     }
   };
 
@@ -207,302 +192,461 @@ export default function Partners() {
     return matchesSearch;
   });
 
-  const totalPartners = partners.length;
-  const totalCommission = Object.values(partnerStats).reduce((sum, stats) => sum + (stats.partnerRevenue || 0), 0);
+  const totalCommission = Object.values(partnerDetails).reduce(
+    (sum, detail) => sum + (detail?.stats?.partnerRevenue || 0), 
+    0
+  );
 
-  const renderSimpleChart = (data, type = "bar") => {
-    if (!data || data.length === 0) {
-      return <p className="text-gray-500 text-center p-4">Aucune donnée disponible</p>;
-    }
+  const totalOrders = Object.values(partnerDetails).reduce(
+    (sum, detail) => sum + (detail?.stats?.completedOrders || 0) + (detail?.stats?.deliveredOrders || 0), 
+    0
+  );
 
-    const maxValue = Math.max(...data.map(item => item.value || item.revenue || item.orders || 0));
-
-    return (
-      <div className="space-y-2">
-        {data.map((item, index) => {
-          const value = item.value || item.revenue || item.orders || 0;
-          const percentage = maxValue > 0 ? (value / maxValue) * 100 : 0;
-          const label = item.label || `${item.month}/${item.year}` || item.supplierName || `Item ${index + 1}`;
-          
-          return (
-            <div key={index} className="flex items-center gap-2">
-              <div className="w-24 text-xs text-gray-600 truncate">{label}</div>
-              <div className="flex-1 bg-gray-200 rounded-full h-4 relative">
-                <div 
-                  className="bg-gradient-to-r from-[#1E3A8A] to-[#3B82F6] h-4 rounded-full transition-all duration-300"
-                  style={{ width: `${percentage}%` }}
-                ></div>
-              </div>
-              <div className="w-20 text-xs text-right font-medium">
-                {typeof value === 'number' ? value.toFixed(2) : value}
-                {item.revenue !== undefined ? ' DT' : ''}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
+  const activeSuppliers = Object.values(partnerDetails).reduce(
+    (sum, detail) => sum + (detail?.stats?.activeSuppliers || 0), 
+    0
+  );
 
   return (
-    <main className="w-full flex flex-col items-center px-8 py-10 min-h-screen space-y-8">
-      <div className="w-full max-w-7xl">
+    <main className="pt-20 min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 p-4 lg:p-8">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
         <div className="flex items-center justify-between mb-8">
-          <h1 className="text-4xl font-semibold text-[#1E3A8A] tracking-tight flex items-center gap-3">
-            <FaHandshake size={36} />
-            Partenaires & Statistiques
-          </h1>
-          <Link
-            to="/home"
-            className="text-[#1E3A8A] hover:text-[#D4AF37] transition-colors duration-300"
-          >
-            <FaHouse size={28} />
-          </Link>
+          <div className="flex items-center gap-4">
+            <div className="bg-gradient-to-br from-blue-600 to-blue-700 p-3 rounded-2xl shadow-lg">
+              <FaHandshake className="text-white text-3xl" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Gestion des Partenaires</h1>
+              <div className="flex items-center gap-4 mt-1">
+                <p className="text-gray-600">Suivi des commissions et performances</p>
+                <input
+                  type="month"
+                  value={currentMonth}
+                  onChange={(e) => setCurrentMonth(e.target.value)}
+                  className="border border-gray-200 rounded-xl px-3 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                />
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl shadow-md transition-all duration-200 flex items-center gap-2"
+            >
+              <FaPlus />
+              Créer un Partenaire
+            </button>
+            <Link
+              to="/home"
+              className="bg-white hover:bg-gray-50 text-gray-700 p-3 rounded-xl shadow-md transition-all duration-200 hover:shadow-lg"
+            >
+              <FaHome size={24} />
+            </Link>
+          </div>
         </div>
 
-
-
+        {/* Global Statistics Cards */}
         {!isFetching && (
-          <div className="w-full bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl border border-gray-100 p-6 mb-8">
-            <h2 className="text-2xl font-semibold text-[#1E3A8A] mb-4">Résumé Global</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-[#1E3A8A]/5 rounded-lg p-4">
-                <h3 className="text-lg font-semibold text-[#1E3A8A] mb-2">Total Partenaires</h3>
-                <p className="text-3xl font-bold text-[#D4AF37]">{totalPartners}</p>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          
+            <div className="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-blue-500">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600 mb-1">Total Partenaires</p>
+                  <p className="text-3xl font-bold text-gray-900">{partners.length}</p>
+                </div>
+                <div className="bg-blue-100 p-4 rounded-xl">
+                  <FaHandshake className="text-blue-600 text-2xl" />
+                </div>
               </div>
-              <div className="bg-[#3B82F6]/5 rounded-lg p-4">
-                <h3 className="text-lg font-semibold text-[#1E3A8A] mb-2">Total Commissions (10%)</h3>
-                <p className="text-3xl font-bold text-[#3B82F6]">{totalCommission.toFixed(2)} DT</p>
+            </div>
+            <div className="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-green-500">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600 mb-1">Commissions Totales</p>
+                  <p className="text-3xl font-bold text-green-600">{totalCommission.toFixed(2)} DT</p>
+                </div>
+                <div className="bg-green-100 p-4 rounded-xl">
+                  <FaEuroSign className="text-green-600 text-2xl" />
+                </div>
               </div>
-              <div className="bg-[#10B981]/5 rounded-lg p-4">
-                <h3 className="text-lg font-semibold text-[#1E3A8A] mb-2">Fournisseurs Actifs</h3>
-                <p className="text-3xl font-bold text-[#10B981]">
-                  {Object.values(partnerStats).reduce((sum, stats) => sum + (stats.activeSuppliers || 0), 0)}
-                </p>
+            </div>
+            <div className="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-purple-500">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600 mb-1">Total Commandes</p>
+                  <p className="text-3xl font-bold text-gray-900">{totalOrders}</p>
+                </div>
+                <div className="bg-purple-100 p-4 rounded-xl">
+                  <FaChartLine className="text-purple-600 text-2xl" />
+                </div>
               </div>
             </div>
           </div>
         )}
 
-        <section className="w-full flex space-x-4 mb-8">
-          <input
-            type="text"
-            placeholder="Rechercher par nom, email ou numéro..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-1/3 p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-all bg-white/50 backdrop-blur-sm"
-          />
-        </section>
-
-        {expandedPartner && (revenueEvolution.length > 0 || monthlyOrders.length > 0 || revenueDistribution.distribution.length > 0) && (
-          <div className="w-full bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl border border-gray-100 p-6 mb-8">
-            <h2 className="text-2xl font-semibold text-[#1E3A8A] mb-4 flex items-center gap-2">
-              <FaChartLine size={24} />
-              Analyses
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {revenueEvolution.length > 0 && (
-                <div className="bg-white rounded-lg p-4 border">
-                  <h3 className="text-lg font-medium text-[#1E3A8A] mb-4">Évolution des Revenus</h3>
-                  {renderSimpleChart(revenueEvolution.map(item => ({
-                    label: `${item.month}/${item.year}`,
-                    value: item.revenue
-                  })))}
-                </div>
-              )}
-              {monthlyOrders.length > 0 && (
-                <div className="bg-white rounded-lg p-4 border">
-                  <h3 className="text-lg font-medium text-[#1E3A8A] mb-4">Volume des Commandes</h3>
-                  {renderSimpleChart(monthlyOrders.map(item => ({
-                    label: `${item.month}/${item.year}`,
-                    value: item.orders
-                  })))}
-                </div>
-              )}
-              {revenueDistribution.distribution.length > 0 && (
-                <div className="bg-white rounded-lg p-4 border">
-                  <h3 className="text-lg font-medium text-[#1E3A8A] mb-4">Distribution des Revenus</h3>
-                  {renderSimpleChart(revenueDistribution.distribution.map(item => ({
-                    label: item.supplierName,
-                    value: item.revenue
-                  })))}
-                  <div className="mt-2 text-sm text-gray-600 text-center">
-                    Total: {revenueDistribution.totalRevenue.toFixed(2)} DT
-                  </div>
-                </div>
-              )}
-            </div>
+        {/* Search Bar */}
+        <div className="bg-white rounded-2xl shadow-lg p-4 mb-8">
+          <div className="relative">
+            <FaSearch className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Rechercher par nom, email ou téléphone..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+            />
           </div>
-        )}
+        </div>
 
+        {/* Partners List */}
         {isFetching ? (
-          <div className="flex justify-center">
+          <div className="bg-white rounded-2xl shadow-lg p-12">
             <Spinner />
           </div>
         ) : error ? (
-          <p className="text-red-500 text-center">{error}</p>
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-red-700">
+            {error}
+          </div>
         ) : filteredPartners.length === 0 ? (
-          <p className="text-gray-500 text-center">Aucun partenaire trouvé</p>
+          <div className="bg-white rounded-2xl shadow-lg p-12 text-center text-gray-500">
+            Aucun partenaire trouvé
+          </div>
         ) : (
-          <ul className="w-full space-y-6">
+          <div className="grid grid-cols-1 gap-6">
             {filteredPartners.map((partner) => {
-              const stats = partnerStats[partner.id] || {};
-              const orders = partnerOrders[partner.id]?.content || [];
-              const totalPages = partnerOrders[partner.id]?.totalPages || 1;
+              const details = partnerDetails[partner.id];
+              const stats = details?.stats || {};
+              const analytics = details?.analytics || {};
+              const topPerformers = analytics.topPerformers || [];
+              const bestSupplier = topPerformers[0];
 
               return (
-                <li
+                <div
                   key={partner.id}
-                  className="p-6 bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 border border-gray-100"
+                  className="bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden"
                 >
-                  <div className="flex justify-between items-center mb-4">
-                    <div className="space-y-1">
-                      <h3 className="text-xl font-semibold text-[#1E3A8A]">{partner.companyName || "N/A"}</h3>
-                      <p className="text-sm text-gray-600">Email: {partner.email || "N/A"}</p>
-                      <p className="text-sm text-gray-600">Téléphone: {partner.phoneNumber || "N/A"}</p>
-                      <p className="text-sm text-gray-600">Adresse: {partner.address || "N/A"}</p>
-                      <p className="text-sm text-gray-600">
-                        Dernière connexion: {partner.lastLogin ? new Date(partner.lastLogin).toLocaleString() : "N/A"}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => togglePartner(partner.id)}
-                      className="text-[#1E3A8A] hover:text-[#D4AF37] transition-colors duration-300 px-4 py-2 border border-[#1E3A8A] rounded-lg hover:bg-[#1E3A8A] hover:text-white"
-                    >
-                      {expandedPartner === partner.id ? "Masquer" : "Afficher"} Détails
-                    </button>
-                  </div>
-                  <div className="flex gap-4 mb-4">
-                    <div className="bg-[#D4AF37]/10 p-3 rounded-lg flex items-center gap-2">
-                      <FaCartShopping className="text-[#D4AF37]" size={20} />
-                      <p className="text-sm font-medium">Total Commandes: {stats.totalOrders || 0}</p>
-                    </div>
-                    <div className="bg-[#3B82F6]/10 p-3 rounded-lg">
-                      <p className="text-sm font-medium">Revenus (10%): {(stats.partnerRevenue || 0).toFixed(2)} DT</p>
-                    </div>
-                    <div className="bg-[#10B981]/10 p-3 rounded-lg">
-                      <p className="text-sm font-medium">Fournisseurs Actifs: {stats.activeSuppliers || 0}</p>
+                  <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="bg-white/20 backdrop-blur-sm p-3 rounded-xl">
+                          <FaHandshake className="text-white text-2xl" />
+                        </div>
+                        <div className="text-white">
+                          <h3 className="text-xl font-bold">{partner.companyName || "N/A"}</h3>
+                          <p className="text-blue-100 text-sm">{partner.email || "N/A"}</p>
+                        </div>
+                      </div>
+                      
                     </div>
                   </div>
-                  {expandedPartner === partner.id && (
-                    <div className="mt-4 space-y-6">
-                      <div>
-                        <h4 className="text-lg font-semibold text-[#1E3A8A] mb-2">Fournisseurs</h4>
-                        {(!partner.suppliers || partner.suppliers.length === 0) ? (
-                          <p className="text-gray-500">Aucun fournisseur associé</p>
-                        ) : (
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse">
-                              <thead>
-                                <tr className="bg-[#1E3A8A]/10">
-                                  <th className="p-2 text-[#1E3A8A] font-semibold">Nom</th>
-                                  <th className="p-2 text-[#1E3A8A] font-semibold">Zone</th>
-                                  <th className="p-2 text-[#1E3A8A] font-semibold">Statut</th>
-                                  <th className="p-2 text-[#1E3A8A] font-semibold">Commandes</th>
-                                  <th className="p-2 text-[#1E3A8A] font-semibold">Revenus (10%)</th>
-                                  <th className="p-2 text-[#1E3A8A] font-semibold">Probabilité</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {partner.suppliers.map((supplier) => {
-                                  const performer = topPerformers.find((p) => p.supplierId === supplier.supplier?.id);
-                                  return (
-                                    <tr key={supplier.supplier?.id || supplier.id} className="border-t border-gray-200">
-                                      <td className="p-2">{supplier.supplier?.companyName || "N/A"}</td>
-                                      <td className="p-2">
-                                        <div className="flex items-center gap-1">
-                                          <FaLocationDot className="text-[#D4AF37]" size={14} />
-                                          <span className="truncate max-w-[150px]">
-                                            {supplier.supplier?.companyAddress || "N/A"}
-                                          </span>
-                                        </div>
-                                      </td>
-                                      <td className="p-2">
-                                        <span
-                                          className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                            supplier.status === "ACTIVE" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                                          }`}
-                                        >
-                                          {supplier.status || "N/A"}
-                                        </span>
-                                      </td>
-                                      <td className="p-2">{performer?.totalOrders || 0}</td>
-                                      <td className="p-2">{((performer?.totalOrders || 0) * 0.1).toFixed(2)} DT</td>
-                                      <td className="p-2">
-                                        <div className="flex items-center gap-1">
-                                          <FaPercent className="text-[#10B981]" size={14} />
-                                          <span>{(performer?.completionRate || 0).toFixed(1)}%</span>
-                                        </div>
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
+
+                  <div className="p-6">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                      <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
+                        <div className="flex items-center gap-3 mb-2">
+                          <div className="bg-green-500 p-2 rounded-lg">
+                            <FaEuroSign className="text-white" />
                           </div>
-                        )}
+                          <span className="text-sm font-medium text-gray-700">Commission Totale</span>
+                        </div>
+                        <p className="text-2xl font-bold text-green-700">{(stats.partnerRevenue || 0).toFixed(2)} DT</p>
+                        <p className="text-xs text-green-600 mt-1">Moyenne: {(stats.suppliers?.reduce((sum, s) => sum + (s.commission || 0), 0) / (stats.suppliers?.length || 1) * 100).toFixed(1)}%</p>
                       </div>
 
-                   
-
-                      <div>
-                        <h4 className="text-lg font-semibold text-[#1E3A8A] mb-2 flex items-center gap-2">
-                          <FaChartPie size={20} />
-                          Top Fournisseurs
-                        </h4>
-                        {topPerformers.length === 0 ? (
-                          <p className="text-gray-500">Aucun top fournisseur</p>
-                        ) : (
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse">
-                              <thead>
-                                <tr className="bg-[#1E3A8A]/10">
-                                  <th className="p-2 text-[#1E3A8A] font-semibold">Rang</th>
-                                  <th className="p-2 text-[#1E3A8A] font-semibold">Nom</th>
-                                  <th className="p-2 text-[#1E3A8A] font-semibold">Zone</th>
-                                  <th className="p-2 text-[#1E3A8A] font-semibold">Commandes</th>
-                                  <th className="p-2 text-[#1E3A8A] font-semibold">Revenus (10%)</th>
-                                  <th className="p-2 text-[#1E3A8A] font-semibold">Taux de Complétion</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {topPerformers.map((performer, index) => (
-                                  <tr key={performer.supplierId || index} className="border-t border-gray-200 hover:bg-gray-50">
-                                    <td className="p-2">
-                                      <span className="inline-flex items-center justify-center w-8 h-8 bg-[#D4AF37] text-white rounded-full text-sm font-bold">
-                                        {performer.rank || index + 1}
-                                      </span>
-                                    </td>
-                                    <td className="p-2 font-medium">{performer.supplierName || "N/A"}</td>
-                                    <td className="p-2">{performer.supplierAddress || performer.companyAddress || "N/A"}</td>
-                                    <td className="p-2">{performer.totalOrders || 0}</td>
-                                    <td className="p-2 font-semibold text-[#10B981]">{(performer.revenue || 0).toFixed(2)} DT</td>
-                                    <td className="p-2">
-                                      <div className="flex items-center gap-2">
-                                        <div className="flex-1 bg-gray-200 rounded-full h-2">
-                                          <div 
-                                            className="bg-[#10B981] h-2 rounded-full transition-all duration-300"
-                                            style={{ width: `${Math.min((performer.completionRate || 0), 100)}%` }}
-                                          ></div>
-                                        </div>
-                                        <span className="text-sm font-medium">
-                                          {(performer.completionRate || 0).toFixed(1)}%
-                                        </span>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                      <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
+                        <div className="flex items-center gap-3 mb-2">
+                          <div className="bg-blue-500 p-2 rounded-lg">
+                            <FaChartLine className="text-white" />
                           </div>
+                          <span className="text-sm font-medium text-gray-700">Commandes</span>
+                        </div>
+                        <p className="text-2xl font-bold text-blue-700">{(stats.completedOrders || 0) + (stats.deliveredOrders || 0)}</p>
+                        <p className="text-xs text-blue-600 mt-1">Complétées ce mois</p>
+                      </div>
+
+                      <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4 border border-purple-200">
+                        <div className="flex items-center gap-3 mb-2">
+                          <div className="bg-purple-500 p-2 rounded-lg">
+                            <FaStore className="text-white" />
+                          </div>
+                          <span className="text-sm font-medium text-gray-700">Fournisseurs</span>
+                        </div>
+                        <p className="text-2xl font-bold text-purple-700">{stats.activeSuppliers || 0}</p>
+                        <p className="text-xs text-purple-600 mt-1">Actifs</p>
+                      </div>
+
+                      <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4 border border-orange-200">
+                        <div className="flex items-center gap-3 mb-2">
+                          <div className="bg-orange-500 p-2 rounded-lg">
+                            <FaTrophy className="text-white" />
+                          </div>
+                          <span className="text-sm font-medium text-gray-700">Meilleur Fournisseur</span>
+                        </div>
+                        {bestSupplier ? (
+                          <>
+                            <p className="text-sm font-bold text-orange-700 truncate">{bestSupplier.supplierName}</p>
+                            <p className="text-xs text-orange-600 mt-1">{(bestSupplier.revenue || 0).toFixed(2)} DT</p>
+                          </>
+                        ) : (
+                          <p className="text-sm text-gray-500">Aucune donnée</p>
                         )}
                       </div>
                     </div>
-                  )}
-                </li>
+
+                    <div className="grid grid-cols-2 gap-4 text-sm text-gray-600 bg-gray-50 rounded-xl p-4">
+                      <div>
+                        <span className="font-medium">📞 Téléphone:</span> {partner.phoneNumber || "N/A"}
+                      </div>
+                      <div>
+                        <span className="font-medium">📍 Adresse:</span> {partner.address || "N/A"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               );
             })}
-          </ul>
+          </div>
+        )}
+
+        {/* Details Modal */}
+        {showModal && selectedPartner && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 flex items-center justify-between sticky top-0 z-10">
+                <h2 className="text-2xl font-bold text-white">Détails du Partenaire ({currentMonth})</h2>
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="bg-white/20 hover:bg-white/30 p-2 rounded-lg transition-all"
+                >
+                  <FaTimes className="text-white text-xl" />
+                </button>
+              </div>
+
+              <div className="p-6">
+                {/* Résumé financier */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-4 text-white shadow-lg">
+                    <p className="text-sm opacity-90 mb-1">💰 Commandes Commissionnables</p>
+                    <p className="text-3xl font-bold">{partnerDetails[selectedPartner.id]?.stats?.completedOrders + partnerDetails[selectedPartner.id]?.stats?.deliveredOrders || 0}</p>
+                    <p className="text-xs opacity-75 mt-1">Hanoutik: {(partnerDetails[selectedPartner.id]?.stats?.completedOrders + partnerDetails[selectedPartner.id]?.stats?.deliveredOrders || 0)} × 1 DT = {((partnerDetails[selectedPartner.id]?.stats?.completedOrders + partnerDetails[selectedPartner.id]?.stats?.deliveredOrders || 0) * 1.0).toFixed(2)} DT</p>
+                  </div>
+                  <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-4 text-white shadow-lg">
+                    <p className="text-sm opacity-90 mb-1">🎯 Commission Partenaire</p>
+                    <p className="text-3xl font-bold">{(partnerDetails[selectedPartner.id]?.stats?.partnerRevenue || 0).toFixed(2)} DT</p>
+                    <p className="text-xs opacity-75 mt-1">Taux moyen: {(partnerDetails[selectedPartner.id]?.stats?.suppliers?.reduce((sum, s) => sum + (s.commission || 0), 0) / (partnerDetails[selectedPartner.id]?.stats?.suppliers?.length || 1) * 100).toFixed(1)}%</p>
+                  </div>
+                  <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl p-4 text-white shadow-lg">
+                    <p className="text-sm opacity-90 mb-1">🔗 Commandes Fusionnées</p>
+                    <p className="text-3xl font-bold">{partnerDetails[selectedPartner.id]?.stats?.mergedOrders || 0}</p>
+                    <p className="text-xs opacity-75 mt-1">Aucune commission générée</p>
+                  </div>
+                </div>
+
+                {/* Explication du système de commission */}
+                <div className="mb-6 bg-gradient-to-r from-blue-50 to-purple-50 border-l-4 border-blue-600 rounded-xl p-4">
+                  <h4 className="font-bold text-gray-900 mb-2 flex items-center gap-2">
+                    ℹ️ Système de Commission
+                  </h4>
+                  <div className="text-sm text-gray-700 space-y-1">
+                    <p>• <strong>Hanoutik prend 1 DT</strong> par commande (completed/delivered sans fusion)</p>
+                    <p>• <strong>Le partenaire gagne un %</strong> de ce 1 DT sur les commandes de ses fournisseurs</p>
+                    <p>• <strong>Commandes commissionnables:</strong> statut = <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded">completed</span> ou <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded">delivered</span> ET mergedTo = null</p>
+                    <p>• <strong>Commandes fusionnées:</strong> ne génèrent <span className="text-red-600 font-semibold">PAS de commission</span></p>
+                  </div>
+                </div>
+
+                <div className="mb-6">
+                  <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                    <FaPercent className="text-blue-600" />
+                    Détail des Commissions par Fournisseur
+                    <span className="text-sm font-normal text-gray-500 ml-2">(Base: 1 DT par commande commissionnable)</span>
+                  </h3>
+                  <div className="bg-gray-50 rounded-xl overflow-hidden">
+                    <table className="w-full">
+                      <thead className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+                        <tr>
+                          <th className="px-4 py-3 text-left">Fournisseur</th>
+                          <th className="px-4 py-3 text-center" title="Total des commandes">Commandes<br/><span className="text-xs font-normal">(Total)</span></th>
+                          <th className="px-4 py-3 text-center" title="Commandes completed/delivered sans fusion">💰 Commissionnables<br/><span className="text-xs font-normal">(payables)</span></th>
+                          <th className="px-4 py-3 text-center" title="Commandes fusionnées - pas de commission">🔗 Fusionnées<br/><span className="text-xs font-normal">(non payables)</span></th>
+                          <th className="px-4 py-3 text-center" title="Taux de commission du partenaire">Taux<br/><span className="text-xs font-normal">(% du 1 DT)</span></th>
+                          <th className="px-4 py-3 text-center" title="Commission totale gagnée par le partenaire">Commission<br/><span className="text-xs font-normal">(TND)</span></th>
+                          <th className="px-4 py-3 text-center">Statut</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {partnerDetails[selectedPartner.id]?.suppliers?.map((supplier, idx) => (
+                          <tr key={idx} className="border-b border-gray-200 hover:bg-blue-50 transition-colors">
+                            <td className="px-4 py-3 font-medium">{supplier.supplier?.companyName || "N/A"}</td>
+                            <td className="px-4 py-3 text-center font-semibold">{supplier.ordersCount || 0}</td>
+                            <td className="px-4 py-3 text-center">
+                              <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-lg font-medium">
+                                {supplier.commissionableOrders || 0}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded-lg font-medium">
+                                {supplier.mergedOrders || 0}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-lg font-medium">
+                                {((supplier.commission || 0) * 100).toFixed(1)}%
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-center font-bold text-green-600">
+                              {supplier.totalCommission !== undefined 
+                                ? supplier.totalCommission.toFixed(2) 
+                                : ((supplier.commissionableOrders || supplier.ordersCount || 0) * 1.0 * (supplier.commission || 0)).toFixed(2)} DT
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                supplier.status === "ACTIVE" 
+                                  ? "bg-green-100 text-green-700" 
+                                  : "bg-red-100 text-red-700"
+                              }`}>
+                                {supplier.status}
+                              </span>
+                            </td>
+                          </tr>
+                        )) || (
+                          <tr>
+                            <td colSpan={7} className="px-4 py-3 text-center text-gray-500">
+                              Aucune donnée disponible {partnerDetails[selectedPartner.id]?.suppliersError ? `(Erreur: ${partnerDetails[selectedPartner.id].suppliersError})` : ""}
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {partnerDetails[selectedPartner.id]?.analytics?.topPerformers?.length > 0 && (
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                      <FaTrophy className="text-orange-500" />
+                      Top Fournisseurs Performance
+                    </h3>
+                    <div className="grid grid-cols-1 gap-4">
+                      {partnerDetails[selectedPartner.id].analytics.topPerformers.slice(0, 5).map((performer, idx) => (
+                        <div key={idx} className="bg-gradient-to-r from-orange-50 to-yellow-50 rounded-xl p-4 border border-orange-200">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                              <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl">
+                                {idx + 1}
+                              </div>
+                              <div>
+                                <p className="font-bold text-gray-900">{performer.supplierName}</p>
+                                <p className="text-sm text-gray-600">{performer.totalOrders} commandes</p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-2xl font-bold text-green-600">{(performer.revenue || 0).toFixed(2)} DT</p>
+                              <p className="text-sm text-gray-600">Taux: {(performer.commission || 0) * 100}%</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Create Partner Modal */}
+        {showCreateModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full">
+              <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 flex items-center justify-between sticky top-0 z-10">
+                <h2 className="text-2xl font-bold text-white">Créer un Nouveau Partenaire</h2>
+                <button
+                  onClick={() => setShowCreateModal(false)}
+                  className="bg-white/20 hover:bg-white/30 p-2 rounded-lg transition-all"
+                >
+                  <FaTimes className="text-white text-xl" />
+                </button>
+              </div>
+
+              <div className="p-6">
+                {createError && (
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4 text-red-700">
+                    {createError}
+                  </div>
+                )}
+                <form onSubmit={handleCreateSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Nom de l'entreprise</label>
+                    <input
+                      type="text"
+                      value={createForm.companyName}
+                      onChange={(e) => setCreateForm({ ...createForm, companyName: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Email</label>
+                    <input
+                      type="email"
+                      value={createForm.email}
+                      onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Numéro de téléphone</label>
+                    <input
+                      type="tel"
+                      value={createForm.phoneNumber}
+                      onChange={(e) => setCreateForm({ ...createForm, phoneNumber: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Adresse</label>
+                    <input
+                      type="text"
+                      value={createForm.address}
+                      onChange={(e) => setCreateForm({ ...createForm, address: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Mot de passe</label>
+                    <input
+                      type="password"
+                      value={createForm.password}
+                      onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                      required
+                    />
+                  </div>
+                  <div className="flex justify-end gap-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateModal(false)}
+                      className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-xl transition-all"
+                    >
+                      Annuler
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all"
+                    >
+                      Créer
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </main>

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom"; 
 import { FaLock, FaPhone } from "react-icons/fa6";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8080";
+const API_URL =  "http://localhost:8080/api";
 
 export default function Login() {
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -26,6 +26,7 @@ export default function Login() {
    
 
     try {
+     
       const res = await fetch(`${API_URL}/auth/supplier/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

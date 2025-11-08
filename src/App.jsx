@@ -1,9 +1,13 @@
-import SideBar from "./components/SideBar";
+import { useNavigate } from "react-router-dom";
+import { useEffect } from "react";
 
 export default function App() {
-  return (
-    <div className="flex h-screen bg-gray-50">
-      <SideBar />
-    </div>
-  );
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // Rediriger automatiquement vers /home
+    navigate("/home");
+  }, [navigate]);
+
+  return null;
 }

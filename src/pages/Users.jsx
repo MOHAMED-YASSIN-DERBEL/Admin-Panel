@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { FaHouse, FaUsers, FaCartShopping, FaChartLine, FaCalendar } from "react-icons/fa6";
+import { FaHouse, FaUsers, FaCartShopping, FaChartLine, FaCalendar, FaCheck, FaXmark, FaToggleOn, FaToggleOff } from "react-icons/fa6";
 import { FaSearch, FaFilter } from "react-icons/fa";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
 
@@ -26,6 +26,7 @@ export default function Users() {
   const [monthlyStats, setMonthlyStats] = useState([]);
   const [dailyStats, setDailyStats] = useState([]);
   const [activeTab, setActiveTab] = useState("users");
+  const [updatingUser, setUpdatingUser] = useState(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -231,6 +232,19 @@ export default function Users() {
     
     const totalOrders = userOrders.length;
 
+    // Commandes fusionnées (mergedTo != null)
+    const mergedOrders = userOrders.filter((order) => 
+      order.mergedTo != null
+    ).length;
+
+    // Commandes commissionnables: completed/delivered ET mergedTo == null
+    const commissionableOrders = userOrders.filter((order) => {
+      const status = order.status?.toLowerCase();
+      const isCommissionableStatus = status === "completed" || status === "delivered" || 
+                                     status === "confirmé" || status === "livré";
+      return isCommissionableStatus && (order.mergedTo == null || order.mergedTo === undefined);
+    }).length;
+
     // Orders this month
     const currentMonthOrders = userOrders.filter((order) => {
       const orderDate = new Date(order.createdAt || order.date);
@@ -257,7 +271,9 @@ export default function Users() {
       totalOrders, 
       statusCounts, 
       monthlyOrders: currentMonthOrders.length,
-      dailyOrders: todayOrders.length
+      dailyOrders: todayOrders.length,
+      mergedOrders,
+      commissionableOrders
     };
   };
 
@@ -285,6 +301,84 @@ export default function Users() {
   const findSupplierName = (supplierId) => {
     const supplier = suppliers.find(s => s.id === supplierId);
     return supplier ? supplier.displayName : "N/A";
+  };
+
+  // Fonction pour mettre à jour le statut de vérification d'un utilisateur
+  const updateUserVerification = async (userId, userType, currentValue) => {
+    setUpdatingUser(userId);
+    const token = localStorage.getItem("token");
+    const endpoint = userType === "Fournisseur" ? "suppliers/update-supplier" : "users/update-user";
+    
+    try {
+      const response = await fetch(`${API_URL}/${endpoint}/${userId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({ isVerified: !currentValue }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Erreur HTTP ${response.status}: ${errorText}`);
+      }
+
+      // Mettre à jour localement
+      if (userType === "Fournisseur") {
+        setSuppliers(suppliers.map(s => 
+          s.id === userId ? { ...s, isVerified: !currentValue } : s
+        ));
+      } else {
+        setUsers(users.map(u => 
+          u.id === userId ? { ...u, isVerified: !currentValue } : u
+        ));
+      }
+    } catch (err) {
+      console.error("Erreur lors de la mise à jour:", err);
+      alert(`Erreur: ${err.message}`);
+    } finally {
+      setUpdatingUser(null);
+    }
+  };
+
+  // Fonction pour mettre à jour l'autorisation de subvention
+  const updateSubsidyAuthorization = async (userId, userType, currentValue) => {
+    setUpdatingUser(userId);
+    const token = localStorage.getItem("token");
+    const endpoint = userType === "Fournisseur" ? "suppliers/update-supplier" : "users/update-user";
+    
+    try {
+      const response = await fetch(`${API_URL}/${endpoint}/${userId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({ hasSubsidyAuthorization: !currentValue }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Erreur HTTP ${response.status}: ${errorText}`);
+      }
+
+      // Mettre à jour localement
+      if (userType === "Fournisseur") {
+        setSuppliers(suppliers.map(s => 
+          s.id === userId ? { ...s, hasSubsidyAuthorization: !currentValue } : s
+        ));
+      } else {
+        setUsers(users.map(u => 
+          u.id === userId ? { ...u, hasSubsidyAuthorization: !currentValue } : u
+        ));
+      }
+    } catch (err) {
+      console.error("Erreur lors de la mise à jour:", err);
+      alert(`Erreur: ${err.message}`);
+    } finally {
+      setUpdatingUser(null);
+    }
   };
 
   const totalUsers = allUsers.length;
@@ -351,7 +445,7 @@ export default function Users() {
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
 
   return (
-    <main className="w-full flex flex-col items-center px-4 py-6 min-h-screen space-y-6 bg-gray-50">
+    <main className="w-full flex flex-col items-center px-4 lg:px-6 py-6 pt-20 min-h-screen space-y-6 bg-gray-50">
       <div className="w-full max-w-7xl">
         <div className="flex flex-col md:flex-row items-center justify-between mb-6">
           <h1 className="text-3xl md:text-4xl font-semibold text-[#1E3A8A] tracking-tight flex items-center gap-3 mb-4 md:mb-0">
@@ -521,78 +615,235 @@ export default function Users() {
             ) : filteredUsers.length === 0 ? (
               <p className="text-gray-500 text-center bg-white p-8 rounded-xl">Aucun utilisateur trouvé</p>
             ) : (
-              <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="bg-[#1E3A8A] text-white">
-                      <th className="p-4 font-semibold">Nom/Entreprise</th>
-                      <th className="p-4 font-semibold">Téléphone</th>
-                      <th className="p-4 font-semibold">Adresse</th>
-                      <th className="p-4 font-semibold">Type</th>
-                      <th className="p-4 font-semibold">Patente</th>
-                      <th className="p-4 font-semibold">Commandes</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredUsers.map((user) => {
-                      const orderStats = getOrderStats(user.id, user.type);
+              <>
+              {/* Vue desktop - Table */}
+              <div className="hidden lg:block bg-white rounded-2xl shadow-xl overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="bg-[#1E3A8A] text-white">
+                        <th className="p-4 font-semibold">Nom/Entreprise</th>
+                        <th className="p-4 font-semibold">Téléphone</th>
+                        <th className="p-4 font-semibold">Adresse</th>
+                        <th className="p-4 font-semibold">Type</th>
+                        <th className="p-4 font-semibold">Patente</th>
+                        <th className="p-4 font-semibold">Vérifié</th>
+                        <th className="p-4 font-semibold">Subvention</th>
+                        <th className="p-4 font-semibold">Commandes</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredUsers.map((user) => {
+                        const orderStats = getOrderStats(user.id, user.type);
+                        const isUpdating = updatingUser === user.id;
 
-                      return (
-                        <tr
-                          key={`${user.type}-${user.id}`}
-                          className="border-t border-gray-200 hover:bg-[#D4AF37]/10 transition-all duration-300"
-                        >
-                          <td className="p-4 text-gray-800 font-medium">{user.displayName || "N/A"}</td>
-                          <td className="p-4 text-gray-800">{user.phoneNumber || "N/A"}</td>
-                          <td className="p-4 text-gray-800">{user.address || "N/A"}</td>
-                          <td className="p-4">
-                            <span
-                              className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                user.type === "Fournisseur"
-                                  ? "bg-[#D4AF37]/20 text-[#D4AF37]"
-                                  : "bg-[#3B82F6]/20 text-[#3B82F6]"
-                              }`}
-                            >
-                              {user.type}
-                            </span>
-                          </td>
-                          <td className="p-4 text-gray-800">
-                            {user.patente ? user.patente : "N/A"}
-                          </td>
-                          <td className="p-4">
-                            {orderStats && orderStats.totalOrders > 0 ? (
-                              <div className="flex flex-col space-y-2">
-                                <div className="flex items-center gap-2">
-                                  <FaCartShopping className="text-[#1E3A8A]" size={16} />
-                                  <span className="font-semibold text-[#1E3A8A]">
-                                    {orderStats.totalOrders} total
-                                  </span>
-                                </div>
-                                <div className="grid grid-cols-2 gap-1 text-xs">
-                                  <span className="text-blue-600">{orderStats.dailyOrders} aujourd'hui</span>
-                                  <span className="text-green-600">{orderStats.monthlyOrders} ce mois</span>
-                                </div>
-                                <div className="flex flex-wrap gap-1">
-                                  {Object.entries(orderStats.statusCounts).map(([status, count]) => (
-                                    <span
-                                      key={status}
-                                      className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(status)}`}
-                                    >
-                                      {status}: {count}
+                        return (
+                          <tr
+                            key={`${user.type}-${user.id}`}
+                            className="border-t border-gray-200 hover:bg-[#D4AF37]/10 transition-all duration-300"
+                          >
+                            <td className="p-4 text-gray-800 font-medium">{user.displayName || "N/A"}</td>
+                            <td className="p-4 text-gray-800">{user.phoneNumber || "N/A"}</td>
+                            <td className="p-4 text-gray-800">{user.address || "N/A"}</td>
+                            <td className="p-4">
+                              <span
+                                className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                  user.type === "Fournisseur"
+                                    ? "bg-[#D4AF37]/20 text-[#D4AF37]"
+                                    : "bg-[#3B82F6]/20 text-[#3B82F6]"
+                                }`}
+                              >
+                                {user.type}
+                              </span>
+                            </td>
+                            <td className="p-4 text-gray-800">
+                              {user.patente ? user.patente : "N/A"}
+                            </td>
+                            <td className="p-4">
+                              <button
+                                onClick={() => updateUserVerification(user.id, user.type, user.isVerified)}
+                                disabled={isUpdating}
+                                className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-300 ${
+                                  user.isVerified
+                                    ? "bg-green-100 text-green-700 hover:bg-green-200"
+                                    : "bg-red-100 text-red-700 hover:bg-red-200"
+                                } ${isUpdating ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                                title={user.isVerified ? "Utilisateur vérifié - Cliquer pour déverifier" : "Utilisateur non vérifié - Cliquer pour vérifier"}
+                              >
+                                {user.isVerified ? <FaCheck size={16} /> : <FaXmark size={16} />}
+                                <span className="text-xs font-medium">
+                                  {isUpdating ? "..." : user.isVerified ? "Vérifié" : "Non vérifié"}
+                                </span>
+                              </button>
+                            </td>
+                            <td className="p-4">
+                              <button
+                                onClick={() => updateSubsidyAuthorization(user.id, user.type, user.hasSubsidyAuthorization)}
+                                disabled={isUpdating}
+                                className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-300 ${
+                                  user.hasSubsidyAuthorization
+                                    ? "bg-blue-100 text-blue-700 hover:bg-blue-200"
+                                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                                } ${isUpdating ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                                title={user.hasSubsidyAuthorization ? "Autorisation active - Cliquer pour désactiver" : "Autorisation inactive - Cliquer pour activer"}
+                              >
+                                {user.hasSubsidyAuthorization ? <FaToggleOn size={20} /> : <FaToggleOff size={20} />}
+                                <span className="text-xs font-medium">
+                                  {isUpdating ? "..." : user.hasSubsidyAuthorization ? "Oui" : "Non"}
+                                </span>
+                              </button>
+                            </td>
+                            <td className="p-4">
+                              {orderStats && orderStats.totalOrders > 0 ? (
+                                <div className="flex flex-col space-y-2">
+                                  <div className="flex items-center gap-2">
+                                    <FaCartShopping className="text-[#1E3A8A]" size={16} />
+                                    <span className="font-semibold text-[#1E3A8A]">
+                                      {orderStats.totalOrders} total
                                     </span>
-                                  ))}
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-1 text-xs">
+                                    <span className="text-blue-600">{orderStats.dailyOrders} aujourd'hui</span>
+                                    <span className="text-green-600">{orderStats.monthlyOrders} ce mois</span>
+                                  </div>
+                                  {user.type === "Fournisseur" && (
+                                    <div className="grid grid-cols-2 gap-1 text-xs mt-2 pt-2 border-t border-gray-200">
+                                      <span className="text-purple-600 font-medium" title="Commandes completed/delivered sans fusion">
+                                        💰 {orderStats.commissionableOrders} commissionnables
+                                      </span>
+                                      <span className="text-orange-600 font-medium" title="Commandes fusionnées">
+                                        🔗 {orderStats.mergedOrders} fusionnées
+                                      </span>
+                                    </div>
+                                  )}
+                                  <div className="flex flex-wrap gap-1">
+                                    {Object.entries(orderStats.statusCounts).map(([status, count]) => (
+                                      <span
+                                        key={status}
+                                        className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(status)}`}
+                                      >
+                                        {status}: {count}
+                                      </span>
+                                    ))}
+                                  </div>
                                 </div>
-                              </div>
-                            ) : (
-                              <span className="text-gray-400">Aucune commande</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                              ) : (
+                                <span className="text-gray-400">Aucune commande</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
+
+              {/* Vue mobile - Cards */}
+              <div className="lg:hidden space-y-4">
+                {filteredUsers.map((user) => {
+                  const orderStats = getOrderStats(user.id, user.type);
+                  const isUpdating = updatingUser === user.id;
+
+                  return (
+                    <div
+                      key={`${user.type}-${user.id}`}
+                      className="bg-white rounded-xl shadow-lg p-4 space-y-3 border border-gray-200 hover:shadow-xl transition-all duration-300"
+                    >
+                      {/* Header */}
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <h3 className="font-bold text-lg text-[#1E3A8A]">{user.displayName || "N/A"}</h3>
+                          <p className="text-sm text-gray-600">{user.phoneNumber || "N/A"}</p>
+                        </div>
+                        <span
+                          className={`px-3 py-1 rounded-full text-xs font-medium ${
+                            user.type === "Fournisseur"
+                              ? "bg-[#D4AF37]/20 text-[#D4AF37]"
+                              : "bg-[#3B82F6]/20 text-[#3B82F6]"
+                          }`}
+                        >
+                          {user.type}
+                        </span>
+                      </div>
+
+                      {/* Adresse & Patente */}
+                      <div className="space-y-1 text-sm">
+                        <p className="text-gray-700"><span className="font-semibold">Adresse:</span> {user.address || "N/A"}</p>
+                        <p className="text-gray-700"><span className="font-semibold">Patente:</span> {user.patente || "N/A"}</p>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          onClick={() => updateUserVerification(user.id, user.type, user.isVerified)}
+                          disabled={isUpdating}
+                          className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg transition-all duration-300 ${
+                            user.isVerified
+                              ? "bg-green-100 text-green-700"
+                              : "bg-red-100 text-red-700"
+                          } ${isUpdating ? "opacity-50" : ""}`}
+                        >
+                          {user.isVerified ? <FaCheck size={14} /> : <FaXmark size={14} />}
+                          <span className="text-xs font-medium">
+                            {isUpdating ? "..." : user.isVerified ? "Vérifié" : "Non vérifié"}
+                          </span>
+                        </button>
+
+                        <button
+                          onClick={() => updateSubsidyAuthorization(user.id, user.type, user.hasSubsidyAuthorization)}
+                          disabled={isUpdating}
+                          className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg transition-all duration-300 ${
+                            user.hasSubsidyAuthorization
+                              ? "bg-blue-100 text-blue-700"
+                              : "bg-gray-100 text-gray-700"
+                          } ${isUpdating ? "opacity-50" : ""}`}
+                        >
+                          {user.hasSubsidyAuthorization ? <FaToggleOn size={18} /> : <FaToggleOff size={18} />}
+                          <span className="text-xs font-medium">
+                            {isUpdating ? "..." : user.hasSubsidyAuthorization ? "Subv. Oui" : "Subv. Non"}
+                          </span>
+                        </button>
+                      </div>
+
+                      {/* Commandes */}
+                      {orderStats && orderStats.totalOrders > 0 ? (
+                        <div className="bg-gray-50 rounded-lg p-3 space-y-2">
+                          <div className="flex items-center gap-2">
+                            <FaCartShopping className="text-[#1E3A8A]" size={14} />
+                            <span className="font-semibold text-[#1E3A8A] text-sm">
+                              {orderStats.totalOrders} commandes
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <span className="text-blue-600">{orderStats.dailyOrders} aujourd'hui</span>
+                            <span className="text-green-600">{orderStats.monthlyOrders} ce mois</span>
+                          </div>
+                          {user.type === "Fournisseur" && (
+                            <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-gray-200">
+                              <span className="text-purple-600 font-medium">💰 {orderStats.commissionableOrders}</span>
+                              <span className="text-orange-600 font-medium">🔗 {orderStats.mergedOrders}</span>
+                            </div>
+                          )}
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {Object.entries(orderStats.statusCounts).map(([status, count]) => (
+                              <span
+                                key={status}
+                                className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(status)}`}
+                              >
+                                {status}: {count}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-gray-400 text-sm text-center py-2">Aucune commande</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              </>
             )}
           </>
         )}
@@ -704,7 +955,7 @@ export default function Users() {
                 <FaCartShopping />
                 Résumé des Commandes {selectedYear}
               </h2>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
                 <div className="bg-[#1E3A8A]/5 rounded-lg p-4">
                   <h3 className="text-lg font-semibold text-[#1E3A8A] mb-2">Total des Commandes</h3>
                   <p className="text-3xl font-bold text-[#D4AF37]">
@@ -723,6 +974,27 @@ export default function Users() {
                   </h3>
                   <p className="text-3xl font-bold text-[#D4AF37]">
                     {monthlyStats.reduce((sum, month) => sum + month.supplierOrders, 0)}
+                  </p>
+                </div>
+                <div className="bg-purple-100/50 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-[#1E3A8A] mb-2">
+                    💰 Commissionnables
+                  </h3>
+                  <p className="text-3xl font-bold text-purple-600" title="Commandes completed/delivered sans fusion">
+                    {orders.filter(order => {
+                      const status = order.status?.toLowerCase();
+                      const isCommissionableStatus = status === "completed" || status === "delivered" || 
+                                                     status === "confirmé" || status === "livré";
+                      return isCommissionableStatus && (order.mergedTo == null || order.mergedTo === undefined);
+                    }).length}
+                  </p>
+                </div>
+                <div className="bg-orange-100/50 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-[#1E3A8A] mb-2">
+                    🔗 Fusionnées
+                  </h3>
+                  <p className="text-3xl font-bold text-orange-600" title="Commandes fusionnées">
+                    {orders.filter(order => order.mergedTo != null).length}
                   </p>
                 </div>
                 <div className="bg-green-100/5 rounded-lg p-4">
@@ -770,7 +1042,7 @@ export default function Users() {
                         <td className="p-4 text-gray-800">
                           {new Date(order.createdAt || order.date).toLocaleDateString()}
                         </td>
-                        <td className="p-4 text-gray-800">{order.amount || "N/A"} DH</td>
+                        <td className="p-4 text-gray-800">{order.amount || "N/A"} TND</td>
                         <td className="p-4">
                           <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
                             {order.status}
