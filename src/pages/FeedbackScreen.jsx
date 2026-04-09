@@ -1,10 +1,70 @@
-import { useEffect, useState } from "react";
-import axios from "axios";
+import { useEffect, useState, useMemo, useCallback, memo } from "react";
 import { FaStar, FaHouse, FaComment, FaFilter } from "react-icons/fa6";
 import { Link } from "react-router-dom";
 import Spinner from "../components/Spinner";
 
-const URL = import.meta.env.VITE_API_URL;
+const API_URL = import.meta.env.VITE_API_URL;
+
+const StarRating = memo(function StarRating({ rating }) {
+  return (
+    <div className="flex">
+      {[0, 1, 2, 3, 4].map((index) => (
+        <FaStar
+          key={index}
+          className={index < rating ? "text-yellow-400" : "text-gray-300"}
+        />
+      ))}
+    </div>
+  );
+});
+
+const FeedbackCard = memo(function FeedbackCard({ feedback, isExpanded, onToggle, commentLimit }) {
+  return (
+    <div className="bg-white rounded-2xl shadow-md p-6 border border-gray-100 hover:shadow-lg transition-all duration-200">
+      <div className="flex justify-between items-center mb-4">
+        <StarRating rating={feedback.rating} />
+        <span className="text-xs text-gray-500 bg-gray-50 px-3 py-1 rounded-full">
+          {new Date(feedback.date).toLocaleDateString("fr-FR")}
+        </span>
+      </div>
+      <p className="text-gray-700 mb-4 leading-relaxed text-sm">
+        {feedback.comment.length > commentLimit && !isExpanded ? (
+          <>
+            {feedback.comment.slice(0, commentLimit)}...
+            <button
+              type="button"
+              onClick={() => onToggle(feedback.id)}
+              className="text-[#1E3A8A] hover:text-[#3B82F6] font-medium ml-1 transition-colors text-sm"
+            >
+              Lire plus
+            </button>
+          </>
+        ) : (
+          <>
+            {feedback.comment}
+            {feedback.comment.length > commentLimit && (
+              <button
+                type="button"
+                onClick={() => onToggle(feedback.id)}
+                className="text-[#1E3A8A] hover:text-[#3B82F6] font-medium ml-1 transition-colors text-sm"
+              >
+                Lire moins
+              </button>
+            )}
+          </>
+        )}
+      </p>
+      <div className="flex items-center gap-2 pt-3 border-t border-gray-100">
+        <div className="bg-[#1E3A8A]/10 p-1.5 rounded-full">
+          <FaComment className="text-[#1E3A8A] text-xs" />
+        </div>
+        <p className="text-xs text-gray-600 font-medium">
+          {feedback.shopOwnerId}
+        </p>
+      </div>
+    </div>
+  );
+});
 
 const FeedbackScreen = () => {
   const [feedbacks, setFeedbacks] = useState([]);
@@ -14,21 +74,25 @@ const FeedbackScreen = () => {
   const [ratingFilter, setRatingFilter] = useState(null);
   const COMMENT_LIMIT = 100;
 
-  // Récupérer le token depuis localStorage
   const token = localStorage.getItem("token");
 
   useEffect(() => {
     const fetchFeedbacks = async () => {
       try {
-        const response = await axios.get(`${URL}/feedback`, {
+        const response = await fetch(`${API_URL}/feedback`, {
           headers: {
-            Authorization: `Bearer ${token}`, // 👈 token ajouté ici
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
           },
         });
-        setFeedbacks(response.data);
+        if (!response.ok) {
+          throw new Error(`Erreur HTTP ${response.status}`);
+        }
+        const data = await response.json();
+        setFeedbacks(data);
         setLoading(false);
       } catch (err) {
-        console.error("Error fetching feedbacks:", err.response?.data || err.message);
+        console.error("Error fetching feedbacks:", err.message);
         setError("Erreur lors du chargement des avis");
         setLoading(false);
       }
@@ -37,46 +101,45 @@ const FeedbackScreen = () => {
     fetchFeedbacks();
   }, [token]);
 
-  const toggleComment = (feedbackId) => {
+  const toggleComment = useCallback((feedbackId) => {
     setExpandedComments((prev) => ({
       ...prev,
       [feedbackId]: !prev[feedbackId],
     }));
-  };
+  }, []);
 
-  const renderStars = (rating) => {
-    return (
-      <div className="flex">
-        {[...Array(5)].map((_, index) => (
-          <FaStar
-            key={index}
-            className={index < rating ? "text-yellow-400" : "text-gray-300"}
-          />
-        ))}
-      </div>
-    );
-  };
+  const handleFilterChange = useCallback((e) => {
+    setRatingFilter(e.target.value === "all" ? null : Number(e.target.value));
+  }, []);
 
-  const filteredFeedbacks = ratingFilter
-    ? feedbacks.filter((feedback) => feedback.rating === ratingFilter)
-    : feedbacks;
+  const filteredFeedbacks = useMemo(() =>
+    ratingFilter
+      ? feedbacks.filter((feedback) => feedback.rating === ratingFilter)
+      : feedbacks,
+    [feedbacks, ratingFilter]
+  );
 
-  // Calculer les statistiques
-  const avgRating = feedbacks.length > 0 
-    ? (feedbacks.reduce((sum, f) => sum + f.rating, 0) / feedbacks.length).toFixed(1)
-    : 0;
+  const avgRating = useMemo(() =>
+    feedbacks.length > 0
+      ? (feedbacks.reduce((sum, f) => sum + f.rating, 0) / feedbacks.length).toFixed(1)
+      : 0,
+    [feedbacks]
+  );
   
-  const ratingDistribution = [5, 4, 3, 2, 1].map(rating => ({
-    rating,
-    count: feedbacks.filter(f => f.rating === rating).length,
-    percentage: feedbacks.length > 0 
-      ? (feedbacks.filter(f => f.rating === rating).length / feedbacks.length) * 100 
-      : 0
-  }));
+  const ratingDistribution = useMemo(() =>
+    [5, 4, 3, 2, 1].map(rating => ({
+      rating,
+      count: feedbacks.filter(f => f.rating === rating).length,
+      percentage: feedbacks.length > 0 
+        ? (feedbacks.filter(f => f.rating === rating).length / feedbacks.length) * 100 
+        : 0
+    })),
+    [feedbacks]
+  );
 
   if (loading) {
     return (
-      <main className="p-8 pt-20 min-h-screen flex items-center justify-center">
+      <main className="p-4 sm:p-6 pt-20 lg:pt-6 min-h-screen flex items-center justify-center">
         <Spinner />
       </main>
     );
@@ -84,7 +147,7 @@ const FeedbackScreen = () => {
 
   if (error) {
     return (
-      <main className="p-8 pt-20 min-h-screen flex items-center justify-center">
+      <main className="p-4 sm:p-6 pt-20 lg:pt-6 min-h-screen flex items-center justify-center">
         <div className="text-center">
           <p className="text-xl text-red-500 mb-4">{error}</p>
           <Link to="/home" className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all">
@@ -96,7 +159,7 @@ const FeedbackScreen = () => {
   }
 
   return (
-    <main className="p-8 pt-20 min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
+    <main className="p-4 sm:p-6 pt-20 lg:pt-6 min-h-screen bg-gradient-to-br from-gray-50 to-blue-50/30">
       <div className="max-w-7xl mx-auto space-y-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
@@ -128,7 +191,7 @@ const FeedbackScreen = () => {
             <h3 className="text-gray-600 text-sm font-medium mb-2">Note Moyenne</h3>
             <p className="text-4xl font-bold text-gray-900">{avgRating}</p>
             <div className="flex items-center gap-1 mt-2">
-              {renderStars(Math.round(avgRating))}
+              <StarRating rating={Math.round(avgRating)} />
             </div>
           </div>
 
@@ -157,7 +220,7 @@ const FeedbackScreen = () => {
             </div>
             <select
               value={ratingFilter || "all"}
-              onChange={(e) => setRatingFilter(e.target.value === "all" ? null : Number(e.target.value))}
+              onChange={handleFilterChange}
               className="w-full p-3 border-2 border-white/30 rounded-xl bg-white/20 backdrop-blur-sm text-white focus:outline-none focus:ring-2 focus:ring-white/50 transition-all"
             >
               <option value="all" className="text-gray-900">Tous les avis</option>
@@ -182,53 +245,13 @@ const FeedbackScreen = () => {
         ) : (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {filteredFeedbacks.map((feedback) => (
-              <div
+              <FeedbackCard
                 key={feedback.id}
-                className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100 hover:shadow-2xl transition-all duration-300 hover:-translate-y-1"
-              >
-                <div className="flex justify-between items-center mb-4">
-                  {renderStars(feedback.rating)}
-                  <span className="text-xs text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
-                    {new Date(feedback.date).toLocaleDateString("fr-FR")}
-                  </span>
-                </div>
-                <p className="text-gray-700 mb-4 leading-relaxed">
-                  {feedback.comment.length > COMMENT_LIMIT &&
-                  !expandedComments[feedback.id] ? (
-                    <>
-                      {feedback.comment.slice(0, COMMENT_LIMIT)}...
-                      <button
-                        type="button"
-                        onClick={() => toggleComment(feedback.id)}
-                        className="text-blue-600 hover:text-blue-800 font-medium ml-1 transition-colors"
-                      >
-                        Lire plus
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      {feedback.comment}
-                      {feedback.comment.length > COMMENT_LIMIT && (
-                        <button
-                          type="button"
-                          onClick={() => toggleComment(feedback.id)}
-                          className="text-blue-600 hover:text-blue-800 font-medium ml-1 transition-colors"
-                        >
-                          Lire moins
-                        </button>
-                      )}
-                    </>
-                  )}
-                </p>
-                <div className="flex items-center gap-2 pt-4 border-t border-gray-100">
-                  <div className="bg-blue-100 p-2 rounded-full">
-                    <FaComment className="text-blue-600 text-sm" />
-                  </div>
-                  <p className="text-sm text-gray-600 font-medium">
-                    {feedback.shopOwnerId}
-                  </p>
-                </div>
-              </div>
+                feedback={feedback}
+                isExpanded={expandedComments[feedback.id]}
+                onToggle={toggleComment}
+                commentLimit={COMMENT_LIMIT}
+              />
             ))}
           </div>
         )}

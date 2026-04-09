@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, memo } from "react";
 import { Link } from "react-router-dom";
 import { 
   FaUsers, 
@@ -16,21 +16,103 @@ import Spinner from "../components/Spinner";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
+// Extracted memoized StatCard component
+const StatCard = memo(function StatCard({ icon: Icon, title, value, color, trend, trendValue, link }) {
+  return (
+    <Link 
+      to={link}
+      className="bg-white rounded-2xl shadow-md p-6 border-l-4 hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5"
+      style={{ borderLeftColor: color }}
+    >
+      <div className="flex items-center justify-between mb-4">
+        <div className="p-3 rounded-xl" style={{ backgroundColor: `${color}15` }}>
+          <Icon className="text-2xl" style={{ color }} />
+        </div>
+        {trend && (
+          <div className={`flex items-center gap-1 text-xs font-medium ${trend === 'up' ? 'text-green-600' : 'text-red-600'}`}>
+            {trend === 'up' ? <FaArrowTrendUp /> : <FaArrowTrendDown />}
+            <span>{trendValue}</span>
+          </div>
+        )}
+      </div>
+      <h3 className="text-gray-500 text-xs font-medium uppercase tracking-wide mb-1">{title}</h3>
+      <p className="text-3xl font-bold text-gray-900">{value.toLocaleString()}</p>
+    </Link>
+  );
+});
+
+// Extracted memoized QuickActionCard component
+const QuickActionCard = memo(function QuickActionCard({ icon: Icon, title, description, color, link }) {
+  return (
+    <Link
+      to={link}
+      className="bg-white rounded-xl shadow-md p-5 hover:shadow-lg transition-all duration-200 border border-gray-100 group"
+    >
+      <div className="flex items-center gap-3 mb-2">
+        <div className="p-2.5 rounded-lg" style={{ backgroundColor: `${color}15` }}>
+          <Icon className="text-xl" style={{ color }} />
+        </div>
+        <h3 className="text-base font-semibold text-gray-900 group-hover:text-[#1E3A8A] transition-colors">{title}</h3>
+      </div>
+      <p className="text-gray-500 text-sm">{description}</p>
+    </Link>
+  );
+});
+
 export default function Home() {
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({
-    users: 0,
-    suppliers: 0,
-    orders: 0,
-    pendingProducts: 0,
-    approvedProducts: 0,
-    partners: 0,
-    ordersToday: 0,
-    ordersThisMonth: 0,
-    commissionableOrders: 0,
-    mergedOrders: 0
+  const [rawData, setRawData] = useState({
+    users: [],
+    suppliers: [],
+    orders: [],
+    products: [],
+    partners: []
   });
   const [error, setError] = useState(null);
+
+  // Mémorisation des calculs de statistiques
+  const stats = useMemo(() => {
+    const { users, suppliers, orders, products, partners } = rawData;
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const ordersToday = orders.filter(order => {
+      const orderDate = new Date(order.createdAt || order.date);
+      return orderDate >= today;
+    }).length;
+
+    const ordersThisMonth = orders.filter(order => {
+      const orderDate = new Date(order.createdAt || order.date);
+      return orderDate.getMonth() === today.getMonth() && 
+             orderDate.getFullYear() === today.getFullYear();
+    }).length;
+
+    const commissionableOrders = orders.filter(order => {
+      const status = order.status?.toLowerCase();
+      const isCommissionable = status === "completed" || status === "delivered" || 
+                               status === "confirmé" || status === "livré";
+      return isCommissionable && (order.mergedTo == null || order.mergedTo === undefined);
+    }).length;
+
+    const mergedOrders = orders.filter(order => order.mergedTo != null).length;
+    const pendingProducts = products.filter(p => p.status === "pending").length;
+    const approvedProducts = products.filter(p => p.status === "approved").length;
+
+    return {
+      users: users.length || 0,
+      suppliers: suppliers.length || 0,
+      orders: orders.length || 0,
+      pendingProducts,
+      approvedProducts,
+      partners: partners.length || 0,
+      ordersToday,
+      ordersThisMonth,
+      commissionableOrders,
+      mergedOrders,
+      totalRevenue: commissionableOrders * 1.0
+    };
+  }, [rawData]);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -65,49 +147,9 @@ export default function Home() {
           partnersRes.ok ? partnersRes.json() : []
         ]);
 
-        // Calculs des statistiques
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        
-        const ordersToday = orders.filter(order => {
-          const orderDate = new Date(order.createdAt || order.date);
-          return orderDate >= today;
-        }).length;
-
-        const ordersThisMonth = orders.filter(order => {
-          const orderDate = new Date(order.createdAt || order.date);
-          return orderDate.getMonth() === today.getMonth() && 
-                 orderDate.getFullYear() === today.getFullYear();
-        }).length;
-
-        const commissionableOrders = orders.filter(order => {
-          const status = order.status?.toLowerCase();
-          const isCommissionable = status === "completed" || status === "delivered" || 
-                                   status === "confirmé" || status === "livré";
-          return isCommissionable && (order.mergedTo == null || order.mergedTo === undefined);
-        }).length;
-
-        const mergedOrders = orders.filter(order => order.mergedTo != null).length;
-
-        const pendingProducts = products.filter(p => p.status === "pending").length;
-        const approvedProducts = products.filter(p => p.status === "approved").length;
-
-        setStats({
-          users: users.length || 0,
-          suppliers: suppliers.length || 0,
-          orders: orders.length || 0,
-          pendingProducts,
-          approvedProducts,
-          partners: partners.length || 0,
-          ordersToday,
-          ordersThisMonth,
-          commissionableOrders,
-          mergedOrders
-        });
-
+        setRawData({ users, suppliers, orders, products, partners });
         setError(null);
       } catch (err) {
-        console.error("Error fetching dashboard data:", err);
         setError("Erreur lors du chargement des statistiques");
       } finally {
         setLoading(false);
@@ -117,47 +159,9 @@ export default function Home() {
     fetchDashboardData();
   }, []);
 
-  const StatCard = ({ icon: Icon, title, value, color, trend, trendValue, link }) => (
-    <Link 
-      to={link}
-      className="bg-white rounded-2xl shadow-lg p-6 border-l-4 hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1"
-      style={{ borderLeftColor: color }}
-    >
-      <div className="flex items-center justify-between mb-4">
-        <div className={`p-4 rounded-xl`} style={{ backgroundColor: `${color}20` }}>
-          <Icon className="text-3xl" style={{ color }} />
-        </div>
-        {trend && (
-          <div className={`flex items-center gap-1 text-sm font-medium ${trend === 'up' ? 'text-green-600' : 'text-red-600'}`}>
-            {trend === 'up' ? <FaArrowTrendUp /> : <FaArrowTrendDown />}
-            <span>{trendValue}</span>
-          </div>
-        )}
-      </div>
-      <h3 className="text-gray-600 text-sm font-medium mb-2">{title}</h3>
-      <p className="text-3xl font-bold text-gray-900">{value.toLocaleString()}</p>
-    </Link>
-  );
-
-  const QuickActionCard = ({ icon: Icon, title, description, color, link }) => (
-    <Link
-      to={link}
-      className="bg-white rounded-xl shadow-md p-6 hover:shadow-xl transition-all duration-300 border-t-4 hover:scale-105"
-      style={{ borderTopColor: color }}
-    >
-      <div className="flex items-center gap-4 mb-3">
-        <div className={`p-3 rounded-lg`} style={{ backgroundColor: `${color}20` }}>
-          <Icon className="text-2xl" style={{ color }} />
-        </div>
-        <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
-      </div>
-      <p className="text-gray-600 text-sm">{description}</p>
-    </Link>
-  );
-
   if (loading) {
     return (
-      <main className="p-8 pt-20 min-h-screen flex items-center justify-center">
+      <main className="p-6 pt-20 lg:pt-6 min-h-screen flex items-center justify-center">
         <Spinner />
       </main>
     );
@@ -165,7 +169,7 @@ export default function Home() {
 
   if (error) {
     return (
-      <main className="p-8 pt-20 min-h-screen flex items-center justify-center">
+      <main className="p-6 pt-20 lg:pt-6 min-h-screen flex items-center justify-center">
         <div className="text-center">
           <p className="text-red-500 text-xl mb-4">{error}</p>
           <button 
@@ -180,7 +184,7 @@ export default function Home() {
   }
 
   return (
-    <main className="p-8 pt-20 min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
+    <main className="p-4 sm:p-6 pt-20 lg:pt-6 min-h-screen bg-gradient-to-br from-gray-50 to-blue-50/30">
       <div className="max-w-7xl mx-auto space-y-8">
         {/* Header */}
         <div className="mb-8">
@@ -243,7 +247,7 @@ export default function Home() {
             </div>
             <h3 className="text-sm font-medium opacity-90 mb-2">Commandes Commissionnables</h3>
             <p className="text-4xl font-bold">{stats.commissionableOrders}</p>
-            <p className="text-sm opacity-75 mt-2">Revenue: {stats.commissionableOrders * 1.0} DT</p>
+            <p className="text-sm opacity-75 mt-2">Revenue: {stats.totalRevenue.toFixed(2)} DT</p>
           </div>
 
           <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl shadow-lg p-6 text-white">
@@ -294,7 +298,7 @@ export default function Home() {
             <div>
               <h3 className="font-bold text-gray-900 mb-2">💰 Système de Commission</h3>
               <div className="text-sm text-gray-700 space-y-1">
-                <p>• <strong>Hanoutik:</strong> 1 DT par commande commissio nnable (completed/delivered, non fusionnée)</p>
+                <p>• <strong>Hanoutik:</strong> 1 DT par commande commissionnable (completed/delivered, non fusionnée)</p>
                 <p>• <strong>Partenaires:</strong> Commission % basée sur le 1 DT</p>
                 <p>• <strong>Commandes fusionnées:</strong> {stats.mergedOrders} (pas de commission)</p>
               </div>

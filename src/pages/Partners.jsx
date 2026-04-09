@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { 
   FaHandshake, 
@@ -11,7 +11,10 @@ import {
   FaEye,
   FaTimes,
   FaPercent,
-  FaPlus
+  FaPlus,
+  FaChevronDown,
+  FaChevronUp,
+  FaMoneyBillWave
 } from "react-icons/fa";
 import Spinner from "../components/Spinner";
 
@@ -35,6 +38,7 @@ export default function Partners() {
     password: ""
   });
   const [createError, setCreateError] = useState(null);
+  const [expandedRevenue, setExpandedRevenue] = useState({});
 
   const token = localStorage.getItem("token");
 
@@ -183,32 +187,46 @@ export default function Partners() {
     }
   };
 
-  const filteredPartners = partners.filter((partner) => {
+  const filteredPartners = useMemo(() => partners.filter((partner) => {
     const matchesSearch =
       search === "" ||
       partner.companyName?.toLowerCase().includes(search.toLowerCase()) ||
       partner.email?.toLowerCase().includes(search.toLowerCase()) ||
       partner.phoneNumber?.toLowerCase().includes(search.toLowerCase());
     return matchesSearch;
-  });
+  }), [partners, search]);
 
-  const totalCommission = Object.values(partnerDetails).reduce(
+  const totalCommission = useMemo(() => Object.values(partnerDetails).reduce(
     (sum, detail) => sum + (detail?.stats?.partnerRevenue || 0), 
     0
-  );
+  ), [partnerDetails]);
 
-  const totalOrders = Object.values(partnerDetails).reduce(
+  const totalOrders = useMemo(() => Object.values(partnerDetails).reduce(
     (sum, detail) => sum + (detail?.stats?.completedOrders || 0) + (detail?.stats?.deliveredOrders || 0), 
     0
-  );
+  ), [partnerDetails]);
 
-  const activeSuppliers = Object.values(partnerDetails).reduce(
+  const activeSuppliers = useMemo(() => Object.values(partnerDetails).reduce(
     (sum, detail) => sum + (detail?.stats?.activeSuppliers || 0), 
     0
-  );
+  ), [partnerDetails]);
+
+  const hanoutikRevenue = useMemo(() => totalOrders * 1, [totalOrders]);
+
+  const handleSearchChange = useCallback((e) => {
+    setSearch(e.target.value);
+  }, []);
+
+  const handleMonthChange = useCallback((e) => {
+    setCurrentMonth(e.target.value);
+  }, []);
+
+  const toggleRevenue = useCallback((partnerId) => {
+    setExpandedRevenue((prev) => ({ ...prev, [partnerId]: !prev[partnerId] }));
+  }, []);
 
   return (
-    <main className="pt-20 min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 p-4 lg:p-8">
+    <main className="pt-20 lg:pt-6 min-h-screen bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-50/20 p-4 lg:p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
@@ -223,7 +241,7 @@ export default function Partners() {
                 <input
                   type="month"
                   value={currentMonth}
-                  onChange={(e) => setCurrentMonth(e.target.value)}
+                  onChange={handleMonthChange}
                   className="border border-gray-200 rounded-xl px-3 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                 />
               </div>
@@ -283,6 +301,18 @@ export default function Partners() {
                 </div>
               </div>
             </div>
+            <div className="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-amber-500">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600 mb-1">Revenu Hanoutik</p>
+                  <p className="text-3xl font-bold text-amber-600">{hanoutikRevenue.toFixed(2)} DT</p>
+                  <p className="text-xs text-gray-500 mt-1">1 DT × {totalOrders} commandes</p>
+                </div>
+                <div className="bg-amber-100 p-4 rounded-xl">
+                  <FaMoneyBillWave className="text-amber-600 text-2xl" />
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -294,7 +324,7 @@ export default function Partners() {
               type="text"
               placeholder="Rechercher par nom, email ou téléphone..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={handleSearchChange}
               className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
             />
           </div>
@@ -402,6 +432,132 @@ export default function Partners() {
                       <div>
                         <span className="font-medium">📍 Adresse:</span> {partner.address || "N/A"}
                       </div>
+                    </div>
+
+                    {/* Revenu Hanoutik par Fournisseur */}
+                    <div className="mt-4">
+                      <button
+                        onClick={() => {
+                          toggleRevenue(partner.id);
+                          if (!partnerDetails[partner.id]?.suppliers) {
+                            fetchPartnerSuppliers(partner.id, currentMonth);
+                          }
+                        }}
+                        className="w-full flex items-center justify-between px-4 py-3 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl hover:from-amber-100 hover:to-orange-100 transition-all duration-200 group"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="bg-amber-500 p-2 rounded-lg shadow-sm">
+                            <FaMoneyBillWave className="text-white text-sm" />
+                          </div>
+                          <span className="font-semibold text-gray-800">Revenu Hanoutik par Fournisseur</span>
+                          <span className="text-sm font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-lg">
+                            {((stats.completedOrders || 0) + (stats.deliveredOrders || 0))} DT
+                          </span>
+                        </div>
+                        {expandedRevenue[partner.id]
+                          ? <FaChevronUp className="text-gray-500 group-hover:text-amber-600 transition-colors" />
+                          : <FaChevronDown className="text-gray-500 group-hover:text-amber-600 transition-colors" />}
+                      </button>
+
+                      {expandedRevenue[partner.id] && (
+                        <div className="mt-3 bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                          {/* Info banner */}
+                          <div className="bg-gradient-to-r from-amber-500 to-orange-500 px-5 py-3 flex items-center justify-between">
+                            <p className="text-white text-sm font-medium">1 DT prélevé par commande commissionnable</p>
+                            <p className="text-white text-lg font-bold">
+                              Total: {((stats.completedOrders || 0) + (stats.deliveredOrders || 0)).toFixed(2)} DT
+                            </p>
+                          </div>
+
+                          {/* Table */}
+                          <div className="overflow-x-auto">
+                            <table className="w-full">
+                              <thead>
+                                <tr className="bg-gray-50 border-b border-gray-200">
+                                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Fournisseur</th>
+                                  <th className="px-5 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Commandes</th>
+                                  <th className="px-5 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Commissionnables</th>
+                                  <th className="px-5 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Fusionnées</th>
+                                  <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Revenu (1 DT × cmd)</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-100">
+                                {partnerDetails[partner.id]?.suppliers?.length > 0 ? (
+                                  partnerDetails[partner.id].suppliers.map((supplier, idx) => {
+                                    const commissionable = supplier.commissionableOrders || supplier.ordersCount || 0;
+                                    const merged = supplier.mergedOrders || 0;
+                                    const revenue = commissionable * 1;
+                                    return (
+                                      <tr key={idx} className="hover:bg-amber-50/50 transition-colors">
+                                        <td className="px-5 py-3">
+                                          <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                                              {(supplier.supplier?.companyName || "?").charAt(0).toUpperCase()}
+                                            </div>
+                                            <div>
+                                              <p className="font-medium text-gray-900">{supplier.supplier?.companyName || "N/A"}</p>
+                                              <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                                supplier.status === "ACTIVE"
+                                                  ? "bg-green-100 text-green-700"
+                                                  : "bg-red-100 text-red-700"
+                                              }`}>{supplier.status || "—"}</span>
+                                            </div>
+                                          </div>
+                                        </td>
+                                        <td className="px-5 py-3 text-center">
+                                          <span className="font-semibold text-gray-800">{supplier.ordersCount || 0}</span>
+                                        </td>
+                                        <td className="px-5 py-3 text-center">
+                                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                            {commissionable}
+                                          </span>
+                                        </td>
+                                        <td className="px-5 py-3 text-center">
+                                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                                            {merged}
+                                          </span>
+                                        </td>
+                                        <td className="px-5 py-3 text-right">
+                                          <span className="text-lg font-bold text-amber-600">{revenue.toFixed(2)} DT</span>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })
+                                ) : (
+                                  <tr>
+                                    <td colSpan={5} className="px-5 py-8 text-center text-gray-400">
+                                      {partnerDetails[partner.id]?.suppliersError
+                                        ? `Erreur: ${partnerDetails[partner.id].suppliersError}`
+                                        : "Chargement des données..."}
+                                    </td>
+                                  </tr>
+                                )}
+                              </tbody>
+                              {partnerDetails[partner.id]?.suppliers?.length > 0 && (
+                                <tfoot>
+                                  <tr className="bg-gradient-to-r from-amber-50 to-orange-50 border-t-2 border-amber-200">
+                                    <td className="px-5 py-3 font-bold text-gray-900">Total</td>
+                                    <td className="px-5 py-3 text-center font-bold text-gray-900">
+                                      {partnerDetails[partner.id].suppliers.reduce((s, sup) => s + (sup.ordersCount || 0), 0)}
+                                    </td>
+                                    <td className="px-5 py-3 text-center font-bold text-green-700">
+                                      {partnerDetails[partner.id].suppliers.reduce((s, sup) => s + (sup.commissionableOrders || sup.ordersCount || 0), 0)}
+                                    </td>
+                                    <td className="px-5 py-3 text-center font-bold text-orange-700">
+                                      {partnerDetails[partner.id].suppliers.reduce((s, sup) => s + (sup.mergedOrders || 0), 0)}
+                                    </td>
+                                    <td className="px-5 py-3 text-right">
+                                      <span className="text-xl font-bold text-amber-600">
+                                        {partnerDetails[partner.id].suppliers.reduce((s, sup) => s + ((sup.commissionableOrders || sup.ordersCount || 0) * 1), 0).toFixed(2)} DT
+                                      </span>
+                                    </td>
+                                  </tr>
+                                </tfoot>
+                              )}
+                            </table>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

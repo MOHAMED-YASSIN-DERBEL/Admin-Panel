@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import Spinner from "../components/Spinner";
-import { FaHouse } from "react-icons/fa6";
+import { FaHouse, FaFloppyDisk, FaXmark } from "react-icons/fa6";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -11,9 +11,12 @@ export default function EditProductPending() {
     description: "",
     category: "",
     barcode: "",
+    bigBoxBarcode: "",
+    smallBoxBarcode: "",
     image: "",
     brand: "",
     status: "pending",
+    supplierId: "",
   });
 
   const [categories, setCategories] = useState([]);
@@ -50,10 +53,13 @@ export default function EditProductPending() {
           name: fetchedProduct.name ?? "",
           description: fetchedProduct.description ?? "",
           category: fetchedProduct.category ?? "",
-          barcode,
+          barcode: fetchedProduct.barcode ?? barcode,
+          bigBoxBarcode: fetchedProduct.bigBoxBarcode ?? "",
+          smallBoxBarcode: fetchedProduct.smallBoxBarcode ?? "",
           image: fetchedProduct.image ?? "",
           brand: fetchedProduct.brand ?? "",
           status: fetchedProduct.status || "pending",
+          supplierId: fetchedProduct.supplierId ?? "",
         }));
 
         // Fetch categories
@@ -80,7 +86,7 @@ export default function EditProductPending() {
     fetchData();
   }, [barcode, token]);
 
-  const handleError = (err) => {
+  const handleError = useCallback((err) => {
     if (err instanceof TypeError && err.message.includes("fetch")) {
       setError("Erreur de connexion au serveur. Vérifiez votre connexion réseau.");
     } else if (err.message.includes("401")) {
@@ -90,30 +96,57 @@ export default function EditProductPending() {
     } else {
       setError(`Erreur: ${err.message}`);
     }
-  };
+  }, []);
 
-  const handleChange = (e) => {
+  const handleChange = useCallback((e) => {
     const { name, value } = e.target;
     // Sanitize input to prevent XSS
     const sanitizedValue = value.replace(/[<>]/g, "");
     setProduct((prev) => ({ ...prev, [name]: sanitizedValue }));
     setError(null);
-  };
+  }, []);
 
-  const isFormValid = () => {
+  const isFormValid = useMemo(() => {
     return (
       (product.name ?? "").trim() &&
       (product.category ?? "").trim() &&
       (product.image ?? "").trim() &&
       (product.brand ?? "").trim() &&
+      (product.barcode ?? "").trim() &&
       ["pending", "approved", "rejected"].includes(product.status)
     );
-  };
+  }, [product]);
 
-  const handleSubmit = async (e) => {
+  const associateSupplierWithCategory = useCallback(async () => {
+    if (!product.supplierId || !product.category) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/supplier-category/associate/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          supplierId: product.supplierId,
+          categoryName: product.category,
+        }),
+      });
+
+      if (!response.ok) {
+        console.warn(`Association supplier-catégorie échouée: ${response.status}`);
+      }
+    } catch (err) {
+      console.warn("Erreur lors de l'association supplier-catégorie:", err);
+    }
+  }, [product.supplierId, product.category, token]);
+
+  const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
 
-    if (!isFormValid()) {
+    if (!isFormValid) {
       setError("Veuillez remplir tous les champs obligatoires.");
       return;
     }
@@ -125,6 +158,11 @@ export default function EditProductPending() {
 
     setIsLoading(true);
     try {
+      // Créer l'association supplier-catégorie si supplierId est fourni
+      if (product.supplierId && product.category) {
+        await associateSupplierWithCategory();
+      }
+
       const response = await fetch(`${API_URL}/product/update`, {
         method: "PUT",
         headers: {
@@ -144,16 +182,19 @@ export default function EditProductPending() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [product, isFormValid, token, navigate, handleError, associateSupplierWithCategory]);
 
   return (
-    <main className="w-full flex flex-col items-center px-6 py-10 pt-20 min-h-screen">
-      <div className="w-full max-w-2xl bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl p-8 space-y-8 border border-gray-100">
-        <div className="flex justify-between items-center">
-          <h1 className="text-4xl font-semibold text-[#1E3A8A] tracking-tight">
-            Modifier le produit ({barcode})
-          </h1>
-          <Link to="/" className="text-[#1E3A8A] hover:text-[#D4AF37] transition-colors duration-300">
+    <main className="w-full flex flex-col items-center px-4 sm:px-6 py-6 pt-20 lg:pt-6 min-h-screen bg-gradient-to-br from-gray-50 to-blue-50/30">
+      <div className="w-full max-w-4xl bg-white/90 backdrop-blur-lg rounded-2xl shadow-xl p-8 space-y-8 border border-gray-100">
+        <div className="flex justify-between items-center border-b pb-4">
+          <div>
+            <h1 className="text-3xl font-bold text-[#1E3A8A] tracking-tight">
+              Modifier le produit
+            </h1>
+            <p className="text-sm text-gray-600 mt-1">Code barre: {barcode}</p>
+          </div>
+          <Link to="/pending-products" className="text-[#1E3A8A] hover:text-[#D4AF37] transition-colors duration-300">
             <FaHouse size={28} />
           </Link>
         </div>
@@ -166,109 +207,200 @@ export default function EditProductPending() {
           <p className="text-red-500 text-center">{error}</p>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Nom *</label>
-              <input
-                type="text"
-                name="name"
-                value={product.name}
-                onChange={handleChange}
-                className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-all bg-white/50 backdrop-blur-sm"
-                placeholder="Nom du produit"
-                required
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Colonne gauche - Formulaire */}
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Nom *</label>
+                  <input
+                    type="text"
+                    name="name"
+                    value={product.name}
+                    onChange={handleChange}
+                    className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-all bg-white/50 backdrop-blur-sm shadow-sm"
+                    placeholder="Nom du produit"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Marque *</label>
+                  <input
+                    type="text"
+                    name="brand"
+                    value={product.brand}
+                    onChange={handleChange}
+                    className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-all bg-white/50 backdrop-blur-sm shadow-sm"
+                    placeholder="Nom de la marque"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Catégorie *</label>
+                  {categories.length === 0 ? (
+                    <p className="text-red-500 text-sm">Aucune catégorie disponible</p>
+                  ) : (
+                    <select
+                      name="category"
+                      value={product.category}
+                      onChange={handleChange}
+                      className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-all bg-white/50 backdrop-blur-sm shadow-sm"
+                      required
+                    >
+                      <option value="">Sélectionner une catégorie</option>
+                      {categories.map((category) => (
+                        <option key={category.id} value={category.name}>
+                          {category.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    ID du Fournisseur
+                    <span className="text-xs text-gray-500 ml-2">(optionnel - pour association)</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="supplierId"
+                    value={product.supplierId}
+                    onChange={handleChange}
+                    className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-all bg-white/50 backdrop-blur-sm shadow-sm"
+                    placeholder="ID du fournisseur"
+                  />
+                  {product.supplierId && product.category && (
+                    <p className="text-xs text-green-600 mt-1">
+                      ✓ Associera le fournisseur à la catégorie "{product.category}"
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Statut *</label>
+                  <select
+                    name="status"
+                    value={product.status}
+                    onChange={handleChange}
+                    className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-all bg-white/50 backdrop-blur-sm shadow-sm"
+                    required
+                  >
+                    <option value="pending">🕒 En attente</option>
+                    <option value="approved">✅ Approuvé</option>
+                    <option value="rejected">❌ Rejeté</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Colonne droite - Prévisualisation */}
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Prévisualisation de l'image</label>
+                  <div className="w-full h-64 bg-gray-100 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden">
+                    {product.image ? (
+                      <img
+                        src={product.image}
+                        alt={product.name || "Aperçu"}
+                        className="w-full h-full object-contain"
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="200"%3E%3Crect fill="%23f3f4f6" width="200" height="200"/%3E%3Ctext fill="%239ca3af" font-family="sans-serif" font-size="14" x="50%" y="50%" text-anchor="middle" dy=".3em"%3EImage invalide%3C/text%3E%3C/svg%3E';
+                        }}
+                      />
+                    ) : (
+                      <span className="text-gray-400 text-sm">Aucune image</span>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                  <textarea
+                    name="description"
+                    value={product.description}
+                    onChange={handleChange}
+                    className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-all bg-white/50 backdrop-blur-sm resize-none h-32 shadow-sm"
+                    placeholder="Description du produit"
+                  />
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-              <textarea
-                name="description"
-                value={product.description}
-                onChange={handleChange}
-                className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-all bg-white/50 backdrop-blur-sm resize-none h-36"
-                placeholder="Description du produit"
-              />
+
+            {/* Codes barres en pleine largeur */}
+            <div className="border-t pt-6">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">Codes barres</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Code barre principal *</label>
+                  <input
+                    type="text"
+                    name="barcode"
+                    value={product.barcode}
+                    onChange={handleChange}
+                    className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-all bg-white/50 backdrop-blur-sm shadow-sm"
+                    placeholder="Code barre"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Grand emballage</label>
+                  <input
+                    type="text"
+                    name="bigBoxBarcode"
+                    value={product.bigBoxBarcode}
+                    onChange={handleChange}
+                    className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-all bg-white/50 backdrop-blur-sm shadow-sm"
+                    placeholder="Optionnel"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Petit emballage</label>
+                  <input
+                    type="text"
+                    name="smallBoxBarcode"
+                    value={product.smallBoxBarcode}
+                    onChange={handleChange}
+                    className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-all bg-white/50 backdrop-blur-sm shadow-sm"
+                    placeholder="Optionnel"
+                  />
+                </div>
+              </div>
             </div>
+
+            {/* URL Image en pleine largeur */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Marque *</label>
-              <input
-                type="text"
-                name="brand"
-                value={product.brand}
-                onChange={handleChange}
-                className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-all bg-white/50 backdrop-blur-sm"
-                placeholder="Nom de la marque"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Catégorie *</label>
-              {categories.length === 0 ? (
-                <p className="text-red-500">Aucune catégorie disponible</p>
-              ) : (
-                <select
-                  name="category"
-                  value={product.category}
-                  onChange={handleChange}
-                  className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-all bg-white/50 backdrop-blur-sm"
-                  required
-                >
-                  <option value="">Sélectionner une catégorie</option>
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.name}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Image URL *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">URL de l'image *</label>
               <input
                 type="url"
                 name="image"
                 value={product.image}
                 onChange={handleChange}
-                className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-all bg-white/50 backdrop-blur-sm"
-                placeholder="URL de l'image"
+                className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-all bg-white/50 backdrop-blur-sm shadow-sm"
+                placeholder="https://exemple.com/image.jpg"
                 required
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Statut *</label>
-              <select
-                name="status"
-                value={product.status}
-                onChange={handleChange}
-                className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-all bg-white/50 backdrop-blur-sm"
-                required
-              >
-                <option value="pending">En attente</option>
-                <option value="approved">Approuvé</option>
-                <option value="rejected">Rejeté</option>
-              </select>
-            </div>
-            <div className="flex space-x-4 justify-center">
-              <button
-                type="submit"
-                disabled={isLoading || !isFormValid()}
-                className={`px-8 py-3 rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl ${
-                  isLoading || !isFormValid()
-                    ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                    : "bg-gradient-to-r from-[#1E3A8A] to-[#3B82F6] text-white hover:from-[#3B82F6] hover:to-[#1E3A8A]"
-                }`}
-              >
-                {isLoading ? "Enregistrement..." : "Enregistrer"}
-              </button>
+
+            {/* Boutons d'action */}
+            <div className="flex space-x-4 justify-end pt-6 border-t">
               <button
                 type="button"
                 onClick={() => navigate("/pending-products")}
                 disabled={isLoading}
-                className="px-8 py-3 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition-all duration-300 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                className="px-6 py-3 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition-all duration-300 disabled:bg-gray-100 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm"
               >
-                Annuler
+                <FaXmark /> Annuler
+              </button>
+              <button
+                type="submit"
+                disabled={isLoading || !isFormValid}
+                className={`px-8 py-3 rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl flex items-center gap-2 ${
+                  isLoading || !isFormValid
+                    ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                    : "bg-gradient-to-r from-[#1E3A8A] to-[#3B82F6] text-white hover:from-[#3B82F6] hover:to-[#1E3A8A]"
+                }`}
+              >
+                <FaFloppyDisk /> {isLoading ? "Enregistrement..." : "Enregistrer"}
               </button>
             </div>
-            {error && <p className="text-red-500 text-center">{error}</p>}
+            {error && <p className="text-red-500 text-center bg-red-50 p-3 rounded-lg">{error}</p>}
           </form>
         )}
       </div>

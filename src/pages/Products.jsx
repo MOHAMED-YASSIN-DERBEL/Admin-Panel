@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { FaBox, FaHouse } from "react-icons/fa6";
+import { FaBox, FaHouse, FaPlus } from "react-icons/fa6";
 import Spinner from "../components/Spinner";
 
 const API_URL = import.meta.env.VITE_API_URL;
@@ -25,53 +25,64 @@ export default function Products() {
 
   const token = localStorage.getItem("token");
 
-  // Supposons une liste de catégories (à ajuster selon ton backend)
-  const categories = ["All", "Produit au poids", "Électronique", "Vêtements", "Alimentaire"];
+  // Catégories disponibles
+  const categories = useMemo(() => 
+    ["All", "Produit au poids", "Électronique", "Vêtements", "Alimentaire"],
+    []
+  );
 
-  // Calcul des segments pour le graphique circulaire
-  const radius = 50;
+  // Calcul optimisé des segments pour le graphique circulaire
   const totalProducts = products.length;
-  const categoryCounts = categories
-    .filter((cat) => cat !== "All")
-    .map((category) => ({
-      category,
-      count: products.filter((p) => p.category === category).length,
-    }));
-  const segments = categoryCounts.map((cat, index) => {
-    const percentage = totalProducts > 0 ? (cat.count / totalProducts) * 100 : 0;
-    const startAngle = index === 0 ? 0 : categoryCounts.slice(0, index).reduce((sum, c) => sum + (c.count / totalProducts) * 360, 0);
-    const endAngle = startAngle + (cat.count / totalProducts) * 360;
-    const pathD = `M60,60 L60,10 A50,50 0 ${endAngle - startAngle > 180 ? 1 : 0},1 ${
-      60 + radius * Math.cos((endAngle * Math.PI) / 180)
-    },${60 + radius * Math.sin((endAngle * Math.PI) / 180)} A50,50 0 ${
-      endAngle - startAngle > 180 ? 1 : 0
-    },0 60,60`;
-    return {
-      category: cat.category,
-      count: cat.count,
-      percentage,
-      pathD,
-      color: ["#3B82F6", "#D4AF37", "#10B981", "#EF4444"][index % 4],
-    };
-  });
+  const radius = 50;
+  const segments = useMemo(() => {
+    const categoryCounts = categories
+      .filter((cat) => cat !== "All")
+      .map((category) => ({
+        category,
+        count: products.filter((p) => p.category === category).length,
+      }));
 
-  // Filtrage des produits
-  const filteredProducts = products.filter((product) => {
-    const matchesSearch =
-      search === "" || product.barcode?.toLowerCase().includes(search.toLowerCase());
-    const matchesCategory = filterCategory === "All" || product.category === filterCategory;
-    return matchesSearch && matchesCategory;
-  });
+    return categoryCounts.map((cat, index) => {
+      const percentage = totalProducts > 0 ? (cat.count / totalProducts) * 100 : 0;
+      const startAngle = index === 0 ? 0 : categoryCounts
+        .slice(0, index)
+        .reduce((sum, c) => sum + (c.count / totalProducts) * 360, 0);
+      const endAngle = startAngle + (cat.count / totalProducts) * 360;
+      const pathD = `M60,60 L60,10 A50,50 0 ${endAngle - startAngle > 180 ? 1 : 0},1 ${
+        60 + 50 * Math.cos((endAngle * Math.PI) / 180)
+      },${60 + 50 * Math.sin((endAngle * Math.PI) / 180)} A50,50 0 ${
+        endAngle - startAngle > 180 ? 1 : 0
+      },0 60,60`;
+      return {
+        category: cat.category,
+        count: cat.count,
+        percentage,
+        pathD,
+        color: ["#3B82F6", "#D4AF37", "#10B981", "#EF4444"][index % 4],
+      };
+    });
+  }, [products, categories]);
+
+  // Filtrage optimisé des produits
+  const filteredProducts = useMemo(() => {
+    if (search === "" && filterCategory === "All") return products;
+    
+    return products.filter((product) => {
+      const matchesSearch = search === "" || 
+        product.barcode?.toLowerCase().includes(search.toLowerCase()) ||
+        product.name?.toLowerCase().includes(search.toLowerCase());
+      const matchesCategory = filterCategory === "All" || product.category === filterCategory;
+      return matchesSearch && matchesCategory;
+    });
+  }, [products, search, filterCategory]);
 
   useEffect(() => {
     const fetchProducts = async () => {
       setIsFetching(true);
 
-
       if (!token) {
         setError("Token manquant, veuillez vous reconnecter");
         setIsFetching(false);
-        console.log("=== END DEBUG ===");
         return;
       }
 
@@ -84,28 +95,15 @@ export default function Products() {
           },
         });
 
-        console.log("Response received:");
-        console.log("Status:", response.status);
-        console.log("Status OK:", response.ok);
-        console.log("Headers:", Object.fromEntries(response.headers.entries()));
-
         if (!response.ok) {
           const errorText = await response.text();
-          console.log("Error response body:", errorText);
           throw new Error(`Erreur HTTP ${response.status}: ${errorText}`);
         }
 
         const fetchedProducts = await response.json();
-        console.log("Response data:", fetchedProducts);
         setProducts(fetchedProducts || []);
         setError(null);
       } catch (err) {
-        console.error("=== FETCH ERROR DETAILS ===");
-        console.error("Error type:", err.constructor.name);
-        console.error("Error message:", err.message);
-        console.error("Full error:", err);
-        console.error("Is network error:", err instanceof TypeError && err.message.includes("fetch"));
-
         if (err instanceof TypeError && err.message.includes("fetch")) {
           setError("Erreur de connexion au serveur. Vérifiez que le backend est démarré sur " + API_URL);
         } else if (err.message.includes("401")) {
@@ -117,23 +115,22 @@ export default function Products() {
         }
       } finally {
         setIsFetching(false);
-        console.log("=== END DEBUG ===");
       }
     };
 
     fetchProducts();
   }, [token]);
 
-  const isFormValid = () => {
+  const isFormValid = useMemo(() => {
     return (
       formData.barcode.trim() !== "" &&
       (modalType === "regular" ? formData.name.trim() !== "" : true) &&
       formData.category.trim() !== "" &&
       formData.image.trim() !== ""
     );
-  };
+  }, [formData, modalType]);
 
-  const handleInputChange = (e) => {
+  const handleInputChange = useCallback((e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
@@ -141,9 +138,17 @@ export default function Products() {
       category: modalType === "byWeight" ? "Produit au poids" : prev.category,
     }));
     setFormError(null);
-  };
+  }, [modalType]);
 
-  const openModal = (type) => {
+  const handleSearchChange = useCallback((e) => {
+    setSearch(e.target.value);
+  }, []);
+
+  const handleCategoryChange = useCallback((e) => {
+    setFilterCategory(e.target.value);
+  }, []);
+
+  const openModal = useCallback((type) => {
     setModalType(type);
     setIsModalOpen(true);
     setFormData({
@@ -155,9 +160,9 @@ export default function Products() {
       status: "approved",
     });
     setFormError(null);
-  };
+  }, []);
 
-  const closeModal = () => {
+  const closeModal = useCallback(() => {
     setIsModalOpen(false);
     setModalType(null);
     setFormData({
@@ -169,16 +174,14 @@ export default function Products() {
       status: "approved",
     });
     setFormError(null);
-  };
+  }, []);
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
-    if (!isFormValid()) {
+    if (!isFormValid) {
       setFormError("Veuillez remplir tous les champs obligatoires (*).");
       return;
     }
-
-   
 
     try {
       const response = await fetch(`${API_URL}/product/`, {
@@ -190,11 +193,8 @@ export default function Products() {
         body: JSON.stringify(formData),
       });
 
-
-
       if (!response.ok) {
         const errorText = await response.text();
-        console.log("Error response body:", errorText);
         throw new Error(`Erreur HTTP ${response.status}: ${errorText}`);
       }
 
@@ -213,15 +213,9 @@ export default function Products() {
       }
 
       const fetchedProducts = await productsResponse.json();
-      console.log("Refreshed products:", fetchedProducts);
       setProducts(fetchedProducts || []);
       closeModal();
     } catch (err) {
-      console.error("=== FETCH ERROR DETAILS ===");
-      console.error("Error type:", err.constructor.name);
-      console.error("Error message:", err.message);
-      console.error("Full error:", err);
-
       if (err.message.includes("409")) {
         setFormError("Ce code-barres existe déjà.");
       } else if (err.message.includes("500")) {
@@ -231,13 +225,10 @@ export default function Products() {
       } else {
         setFormError(`Erreur lors de la création du produit: ${err.message}`);
       }
-    } finally {
-      console.log("=== END DEBUG ===");
     }
-  };
-
+  }, [formData, isFormValid, token, closeModal]);
   return (
-    <main className="p-8 pt-20 min-h-screen space-y-8">
+    <main className="p-4 sm:p-6 pt-20 lg:pt-6 min-h-screen space-y-6">
       <div className="w-full max-w-6xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-4xl font-semibold text-[#1E3A8A] tracking-tight flex items-center gap-3">
@@ -290,18 +281,18 @@ export default function Products() {
           </div>
         )}
 
-        <section className="w-full flex space-x-4 mb-8">
+        <section className="w-full flex flex-wrap gap-4 mb-8">
           <input
             type="text"
-            placeholder="Rechercher par code-barres..."
+            placeholder="🔍 Rechercher par code-barres ou nom..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-1/3 p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-all bg-white/50 backdrop-blur-sm"
+            onChange={handleSearchChange}
+            className="flex-1 min-w-[250px] p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-all bg-white/50 backdrop-blur-sm shadow-sm"
           />
           <select
             value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
-            className="w-1/4 p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-all bg-white/50 backdrop-blur-sm"
+            onChange={handleCategoryChange}
+            className="w-48 p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#D4AF37] focus:border-[#D4AF37] transition-all bg-white/50 backdrop-blur-sm shadow-sm"
           >
             {categories.map((category) => (
               <option key={category} value={category}>
@@ -311,17 +302,26 @@ export default function Products() {
           </select>
           <button
             onClick={() => openModal("regular")}
-            className="px-4 py-2 bg-[#1E3A8A] text-white rounded-xl hover:bg-[#D4AF37] transition-all duration-300"
+            className="px-6 py-3 bg-gradient-to-r from-[#1E3A8A] to-[#3B82F6] text-white rounded-xl hover:from-[#3B82F6] hover:to-[#1E3A8A] transition-all duration-300 shadow-lg hover:shadow-xl flex items-center gap-2"
           >
-            Ajouter Produit
+            <FaPlus /> Produit
           </button>
           <button
             onClick={() => openModal("byWeight")}
-            className="px-4 py-2 bg-[#3B82F6] text-white rounded-xl hover:bg-[#D4AF37] transition-all duration-300"
+            className="px-6 py-3 bg-gradient-to-r from-[#D4AF37] to-[#F59E0B] text-white rounded-xl hover:from-[#F59E0B] hover:to-[#D4AF37] transition-all duration-300 shadow-lg hover:shadow-xl flex items-center gap-2"
           >
-            Ajouter Produit au Poids
+            <FaPlus /> Produit Poids
           </button>
         </section>
+        
+        {!isFetching && (
+          <div className="mb-6 flex items-center justify-between bg-white/50 backdrop-blur-sm rounded-xl p-4 shadow-sm">
+            <span className="text-sm text-gray-600">
+              <span className="font-semibold text-[#1E3A8A]">{filteredProducts.length}</span> produit(s) affiché(s)
+              {search || filterCategory !== "All" ? ` sur ${products.length} total` : ""}
+            </span>
+          </div>
+        )}
 
         {isModalOpen && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -424,9 +424,9 @@ export default function Products() {
                   </button>
                   <button
                     onClick={handleSubmit}
-                    disabled={!isFormValid()}
+                    disabled={!isFormValid}
                     className={`px-4 py-2 rounded-xl transition-all duration-300 ${
-                      isFormValid()
+                      isFormValid
                         ? "bg-[#1E3A8A] text-white hover:bg-[#D4AF37]"
                         : "bg-gray-300 text-gray-500 cursor-not-allowed"
                     }`}
@@ -470,15 +470,17 @@ export default function Products() {
                         <img
                           src={product.image}
                           alt={product.name || "Produit"}
-                          className="w-12 h-12 object-cover rounded-lg"
-                          onError={(e) => (e.target.src = "https://via.placeholder.com/48?text=N/A")}
+                          loading="lazy"
+                          className="w-14 h-14 object-cover rounded-lg shadow-sm hover:scale-110 transition-transform duration-300"
+                          onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="56" height="56"%3E%3Crect fill="%23f3f4f6" width="56" height="56"/%3E%3Ctext fill="%239ca3af" font-family="sans-serif" font-size="10" x="50%" y="50%" text-anchor="middle" dy=".3em"%3ENo Img%3C/text%3E%3C/svg%3E';
+                          }}
                         />
                       ) : (
-                        <img
-                          src="https://via.placeholder.com/48?text=N/A"
-                          alt="Placeholder"
-                          className="w-12 h-12 object-cover rounded-lg"
-                        />
+                        <div className="w-14 h-14 bg-gray-200 rounded-lg flex items-center justify-center text-gray-400 text-xs">
+                          N/A
+                        </div>
                       )}
                     </td>
                     <td className="p-4 text-gray-800">{product.name || "N/A"}</td>

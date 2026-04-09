@@ -1,7 +1,7 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { FaHouse, FaUsers, FaCartShopping, FaChartLine, FaCalendar, FaCheck, FaXmark, FaToggleOn, FaToggleOff } from "react-icons/fa6";
-import { FaSearch, FaFilter } from "react-icons/fa";
+import { FaHouse, FaUsers, FaCartShopping, FaChartLine, FaCalendar, FaCheck, FaXmark, FaToggleOn, FaToggleOff, FaMoneyBill1Wave } from "react-icons/fa6";
+import { FaSearch, FaFilter, FaSortAmountDown, FaSortAmountUp } from "react-icons/fa";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
 
 const API_URL = import.meta.env.VITE_API_URL;
@@ -27,6 +27,8 @@ export default function Users() {
   const [dailyStats, setDailyStats] = useState([]);
   const [activeTab, setActiveTab] = useState("users");
   const [updatingUser, setUpdatingUser] = useState(null);
+  const [revenueSortField, setRevenueSortField] = useState("revenue");
+  const [revenueSortDir, setRevenueSortDir] = useState("desc");
 
   useEffect(() => {
     const fetchData = async () => {
@@ -107,14 +109,14 @@ export default function Users() {
     fetchData();
   }, []);
 
-  // Fonction pour extraire l'ID d'un objet DBRef ou string
-  const extractId = (obj) => {
+  // Fonction stable pour extraire l'ID d'un objet DBRef ou string
+  const extractId = useCallback((obj) => {
     if (!obj) return null;
     if (typeof obj === 'string') return obj;
-    if (obj.$oid) return obj.$oid; // Format MongoDB
+    if (obj.$oid) return obj.$oid;
     if (obj.id) return obj.id;
     return null;
-  };
+  }, []);
 
   const calculateMonthlyStats = (ordersData, allUsers, year) => {
     const monthNames = [
@@ -217,7 +219,7 @@ export default function Users() {
     }
   }, [selectedYear, selectedMonth, orders, users, suppliers]);
 
-  const getOrderStats = (userId, type) => {
+  const getOrderStats = useCallback((userId, type) => {
     let userOrders = [];
     
     if (type === "Fournisseur") {
@@ -275,11 +277,11 @@ export default function Users() {
       mergedOrders,
       commissionableOrders
     };
-  };
+  }, [orders, extractId, selectedMonth, selectedYear]);
 
   const allUsers = useMemo(() => [...users, ...suppliers], [users, suppliers]);
   
-  const filteredUsers = allUsers.filter((user) => {
+  const filteredUsers = useMemo(() => allUsers.filter((user) => {
     const matchesSearch =
       search === "" ||
       (user.displayName || "").toLowerCase().includes(search.toLowerCase()) ||
@@ -289,22 +291,22 @@ export default function Users() {
     const matchesType = filterType === "Tous" || user.type?.toLowerCase() === filterType.toLowerCase();
 
     return matchesSearch && matchesType;
-  });
+  }), [allUsers, search, filterType]);
 
-  // Fonction pour trouver le nom d'un utilisateur par ID
-  const findUserName = (userId) => {
+  // Fonction stable pour trouver le nom d'un utilisateur par ID
+  const findUserName = useCallback((userId) => {
     const user = users.find(u => u.id === userId);
     return user ? user.displayName : "N/A";
-  };
+  }, [users]);
 
-  // Fonction pour trouver le nom d'un fournisseur par ID
-  const findSupplierName = (supplierId) => {
+  // Fonction stable pour trouver le nom d'un fournisseur par ID
+  const findSupplierName = useCallback((supplierId) => {
     const supplier = suppliers.find(s => s.id === supplierId);
     return supplier ? supplier.displayName : "N/A";
-  };
+  }, [suppliers]);
 
-  // Fonction pour mettre à jour le statut de vérification d'un utilisateur
-  const updateUserVerification = async (userId, userType, currentValue) => {
+  // Fonction stable pour mettre à jour le statut de vérification d'un utilisateur
+  const updateUserVerification = useCallback(async (userId, userType, currentValue) => {
     setUpdatingUser(userId);
     const token = localStorage.getItem("token");
     const endpoint = userType === "Fournisseur" ? "suppliers/update-supplier" : "users/update-user";
@@ -326,11 +328,11 @@ export default function Users() {
 
       // Mettre à jour localement
       if (userType === "Fournisseur") {
-        setSuppliers(suppliers.map(s => 
+        setSuppliers(prev => prev.map(s => 
           s.id === userId ? { ...s, isVerified: !currentValue } : s
         ));
       } else {
-        setUsers(users.map(u => 
+        setUsers(prev => prev.map(u => 
           u.id === userId ? { ...u, isVerified: !currentValue } : u
         ));
       }
@@ -340,10 +342,10 @@ export default function Users() {
     } finally {
       setUpdatingUser(null);
     }
-  };
+  }, []);
 
-  // Fonction pour mettre à jour l'autorisation de subvention
-  const updateSubsidyAuthorization = async (userId, userType, currentValue) => {
+  // Fonction stable pour mettre à jour l'autorisation de subvention
+  const updateSubsidyAuthorization = useCallback(async (userId, userType, currentValue) => {
     setUpdatingUser(userId);
     const token = localStorage.getItem("token");
     const endpoint = userType === "Fournisseur" ? "suppliers/update-supplier" : "users/update-user";
@@ -365,11 +367,11 @@ export default function Users() {
 
       // Mettre à jour localement
       if (userType === "Fournisseur") {
-        setSuppliers(suppliers.map(s => 
+        setSuppliers(prev => prev.map(s => 
           s.id === userId ? { ...s, hasSubsidyAuthorization: !currentValue } : s
         ));
       } else {
-        setUsers(users.map(u => 
+        setUsers(prev => prev.map(u => 
           u.id === userId ? { ...u, hasSubsidyAuthorization: !currentValue } : u
         ));
       }
@@ -379,20 +381,20 @@ export default function Users() {
     } finally {
       setUpdatingUser(null);
     }
-  };
+  }, []);
 
-  const totalUsers = allUsers.length;
-  const hanoutsCount = users.length;
-  const fournisseursCount = suppliers.length;
-  const hanoutsPercentage = totalUsers > 0 ? (hanoutsCount / totalUsers) * 100 : 0;
-  const fournisseursPercentage = totalUsers > 0 ? (fournisseursCount / totalUsers) * 100 : 0;
+  const totalUsers = useMemo(() => allUsers.length, [allUsers]);
+  const hanoutsCount = useMemo(() => users.length, [users]);
+  const fournisseursCount = useMemo(() => suppliers.length, [suppliers]);
+  const hanoutsPercentage = useMemo(() => totalUsers > 0 ? (hanoutsCount / totalUsers) * 100 : 0, [totalUsers, hanoutsCount]);
+  const fournisseursPercentage = useMemo(() => totalUsers > 0 ? (fournisseursCount / totalUsers) * 100 : 0, [totalUsers, fournisseursCount]);
 
   const radius = 50;
   const circumference = 2 * Math.PI * radius;
-  const hanoutsOffset = circumference - (hanoutsPercentage / 100) * circumference;
-  const fournisseursOffset = circumference - (fournisseursPercentage / 100) * circumference;
+  const hanoutsOffset = useMemo(() => circumference - (hanoutsPercentage / 100) * circumference, [circumference, hanoutsPercentage]);
+  const fournisseursOffset = useMemo(() => circumference - (fournisseursPercentage / 100) * circumference, [circumference, fournisseursPercentage]);
 
-  const getStatusColor = (status) => {
+  const getStatusColor = useCallback((status) => {
     switch (status?.toLowerCase()) {
       case "pending":
       case "en_attente":
@@ -409,19 +411,22 @@ export default function Users() {
       default:
         return "bg-gray-100 text-gray-800";
     }
-  };
+  }, []);
 
-  const yearOptions = [];
-  for (let year = 2020; year <= new Date().getFullYear(); year++) {
-    yearOptions.push(year);
-  }
+  const yearOptions = useMemo(() => {
+    const options = [];
+    for (let year = 2020; year <= new Date().getFullYear(); year++) {
+      options.push(year);
+    }
+    return options;
+  }, []);
 
-  const monthOptions = [
+  const monthOptions = useMemo(() => [
     "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
     "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"
-  ];
+  ], []);
 
-  const chartData = timeRange === "month" 
+  const chartData = useMemo(() => timeRange === "month" 
     ? monthlyStats.map((stat) => ({
         name: stat.month,
         "Commandes Hanouts": stat.hanoutOrders,
@@ -433,19 +438,78 @@ export default function Users() {
         "Commandes Hanouts": stat.hanoutOrders,
         "Commandes Fournisseurs": stat.supplierOrders,
         "Total": stat.totalOrders,
-      }));
+      })), [timeRange, monthlyStats, dailyStats]);
 
-  const statusData = Object.entries(
+  const statusData = useMemo(() => Object.entries(
     orders.reduce((acc, order) => {
       acc[order.status] = (acc[order.status] || 0) + 1;
       return acc;
     }, {})
-  ).map(([name, value]) => ({ name, value }));
+  ).map(([name, value]) => ({ name, value })), [orders]);
 
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
 
+  // Revenu Hanoutik par fournisseur (1 DT par commande commissionnable)
+  const supplierRevenueData = useMemo(() => {
+    return suppliers.map((supplier) => {
+      const supplierOrders = orders.filter((order) => extractId(order.supplier) === supplier.id);
+      const total = supplierOrders.length;
+      const commissionable = supplierOrders.filter((order) => {
+        const status = order.status?.toLowerCase();
+        const isOk = status === "completed" || status === "delivered" || status === "confirmé" || status === "livré";
+        return isOk && (order.mergedTo == null || order.mergedTo === undefined);
+      }).length;
+      const merged = supplierOrders.filter((order) => order.mergedTo != null).length;
+      const monthOrders = supplierOrders.filter((order) => {
+        const d = new Date(order.createdAt || order.date);
+        return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
+      });
+      const monthCommissionable = monthOrders.filter((order) => {
+        const status = order.status?.toLowerCase();
+        const isOk = status === "completed" || status === "delivered" || status === "confirmé" || status === "livré";
+        return isOk && (order.mergedTo == null || order.mergedTo === undefined);
+      }).length;
+      return {
+        id: supplier.id,
+        name: supplier.displayName || "N/A",
+        phone: supplier.phoneNumber || "",
+        isVerified: supplier.isVerified,
+        totalOrders: total,
+        commissionable,
+        merged,
+        revenue: commissionable * 1,
+        monthCommissionable,
+        monthRevenue: monthCommissionable * 1,
+      };
+    });
+  }, [suppliers, orders, extractId, selectedMonth, selectedYear]);
+
+  const sortedSupplierRevenue = useMemo(() => {
+    return [...supplierRevenueData].sort((a, b) => {
+      const aVal = a[revenueSortField] ?? 0;
+      const bVal = b[revenueSortField] ?? 0;
+      return revenueSortDir === "desc" ? bVal - aVal : aVal - bVal;
+    });
+  }, [supplierRevenueData, revenueSortField, revenueSortDir]);
+
+  const totalHanoutikRevenue = useMemo(() => supplierRevenueData.reduce((s, r) => s + r.revenue, 0), [supplierRevenueData]);
+  const totalMonthRevenue = useMemo(() => supplierRevenueData.reduce((s, r) => s + r.monthRevenue, 0), [supplierRevenueData]);
+  const totalCommissionableOrders = useMemo(() => supplierRevenueData.reduce((s, r) => s + r.commissionable, 0), [supplierRevenueData]);
+  const monthCommissionableTotal = useMemo(() => supplierRevenueData.reduce((s, r) => s + r.monthCommissionable, 0), [supplierRevenueData]);
+
+  const toggleRevenueSort = useCallback((field) => {
+    setRevenueSortField((prev) => {
+      if (prev === field) {
+        setRevenueSortDir((d) => (d === "desc" ? "asc" : "desc"));
+        return prev;
+      }
+      setRevenueSortDir("desc");
+      return field;
+    });
+  }, []);
+
   return (
-    <main className="w-full flex flex-col items-center px-4 lg:px-6 py-6 pt-20 min-h-screen space-y-6 bg-gray-50">
+    <main className="w-full flex flex-col items-center px-4 lg:px-6 py-6 pt-20 lg:pt-6 min-h-screen space-y-6 bg-gray-50">
       <div className="w-full max-w-7xl">
         <div className="flex flex-col md:flex-row items-center justify-between mb-6">
           <h1 className="text-3xl md:text-4xl font-semibold text-[#1E3A8A] tracking-tight flex items-center gap-3 mb-4 md:mb-0">
@@ -480,6 +544,13 @@ export default function Users() {
             onClick={() => setActiveTab("orders")}
           >
             Commandes
+          </button>
+          <button
+            className={`py-3 px-6 font-medium text-sm flex items-center gap-2 ${activeTab === "revenu" ? "text-[#1E3A8A] border-b-2 border-[#1E3A8A]" : "text-gray-500"}`}
+            onClick={() => setActiveTab("revenu")}
+          >
+            <FaMoneyBill1Wave size={16} />
+            Revenu Hanoutik
           </button>
         </div>
 
@@ -1005,6 +1076,187 @@ export default function Users() {
                     {monthlyStats[selectedMonth]?.totalOrders || 0}
                   </p>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "revenu" && (
+          <div className="space-y-6">
+            {/* Revenue Summary Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-amber-500">
+                <p className="text-sm font-medium text-gray-500 mb-1">Revenu Total Hanoutik</p>
+                <p className="text-3xl font-bold text-amber-600">{totalHanoutikRevenue.toFixed(2)} DT</p>
+                <p className="text-xs text-gray-400 mt-1">1 DT × {totalCommissionableOrders} commandes</p>
+              </div>
+              <div className="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-blue-500">
+                <p className="text-sm font-medium text-gray-500 mb-1">Revenu {monthOptions[selectedMonth]}</p>
+                <p className="text-3xl font-bold text-blue-600">{totalMonthRevenue.toFixed(2)} DT</p>
+                <p className="text-xs text-gray-400 mt-1">1 DT × {monthCommissionableTotal} commandes</p>
+              </div>
+              <div className="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-green-500">
+                <p className="text-sm font-medium text-gray-500 mb-1">Fournisseurs Actifs</p>
+                <p className="text-3xl font-bold text-green-600">{supplierRevenueData.filter((s) => s.totalOrders > 0).length}</p>
+                <p className="text-xs text-gray-400 mt-1">sur {suppliers.length} total</p>
+              </div>
+              <div className="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-purple-500">
+                <p className="text-sm font-medium text-gray-500 mb-1">Revenu Moyen / Fournisseur</p>
+                <p className="text-3xl font-bold text-purple-600">
+                  {supplierRevenueData.filter((s) => s.commissionable > 0).length > 0
+                    ? (totalHanoutikRevenue / supplierRevenueData.filter((s) => s.commissionable > 0).length).toFixed(2)
+                    : "0.00"} DT
+                </p>
+                <p className="text-xs text-gray-400 mt-1">par fournisseur actif</p>
+              </div>
+            </div>
+
+            {/* Commission explanation */}
+            <div className="bg-gradient-to-r from-amber-50 to-orange-50 border-l-4 border-amber-500 rounded-xl p-5">
+              <h4 className="font-bold text-gray-900 mb-2 flex items-center gap-2">
+                <FaMoneyBill1Wave className="text-amber-600" />
+                Système de Revenu Hanoutik
+              </h4>
+              <div className="text-sm text-gray-700 grid grid-cols-1 md:grid-cols-2 gap-2">
+                <p>• <strong>1 DT prélevé</strong> par commande commissionnable</p>
+                <p>• Statuts éligibles : <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-xs">completed</span> <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">delivered</span></p>
+                <p>• Commandes fusionnées (<span className="text-orange-600">mergedTo ≠ null</span>) = <strong>pas de revenu</strong></p>
+                <p>• Revenu = 1 DT × nombre de commandes commissionnables</p>
+              </div>
+            </div>
+
+            {/* Supplier Revenue Table */}
+            <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+              <div className="bg-gradient-to-r from-amber-500 to-orange-500 px-6 py-4 flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white flex items-center gap-3">
+                  <FaMoneyBill1Wave />
+                  Revenu par Fournisseur
+                </h2>
+                <span className="bg-white/20 backdrop-blur-sm text-white px-4 py-1.5 rounded-lg text-sm font-medium">
+                  {monthOptions[selectedMonth]} {selectedYear}
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-200">
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">#</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Fournisseur</th>
+                      <th
+                        className="px-6 py-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-amber-600 transition-colors select-none"
+                        onClick={() => toggleRevenueSort("totalOrders")}
+                      >
+                        <span className="inline-flex items-center gap-1">
+                          Commandes
+                          {revenueSortField === "totalOrders" && (revenueSortDir === "desc" ? <FaSortAmountDown size={10} /> : <FaSortAmountUp size={10} />)}
+                        </span>
+                      </th>
+                      <th
+                        className="px-6 py-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-green-600 transition-colors select-none"
+                        onClick={() => toggleRevenueSort("commissionable")}
+                      >
+                        <span className="inline-flex items-center gap-1">
+                          Commissionnables
+                          {revenueSortField === "commissionable" && (revenueSortDir === "desc" ? <FaSortAmountDown size={10} /> : <FaSortAmountUp size={10} />)}
+                        </span>
+                      </th>
+                      <th className="px-6 py-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Fusionnées</th>
+                      <th
+                        className="px-6 py-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-blue-600 transition-colors select-none"
+                        onClick={() => toggleRevenueSort("monthRevenue")}
+                      >
+                        <span className="inline-flex items-center gap-1">
+                          Ce Mois
+                          {revenueSortField === "monthRevenue" && (revenueSortDir === "desc" ? <FaSortAmountDown size={10} /> : <FaSortAmountUp size={10} />)}
+                        </span>
+                      </th>
+                      <th
+                        className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-amber-600 transition-colors select-none"
+                        onClick={() => toggleRevenueSort("revenue")}
+                      >
+                        <span className="inline-flex items-center gap-1">
+                          Revenu Total
+                          {revenueSortField === "revenue" && (revenueSortDir === "desc" ? <FaSortAmountDown size={10} /> : <FaSortAmountUp size={10} />)}
+                        </span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {sortedSupplierRevenue.length > 0 ? (
+                      sortedSupplierRevenue.map((row, idx) => (
+                        <tr key={row.id} className="hover:bg-amber-50/40 transition-colors">
+                          <td className="px-6 py-4 text-sm text-gray-400 font-medium">{idx + 1}</td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                                {row.name.charAt(0).toUpperCase()}
+                              </div>
+                              <div>
+                                <p className="font-semibold text-gray-900">{row.name}</p>
+                                <p className="text-xs text-gray-500">{row.phone}</p>
+                              </div>
+                              {row.isVerified && (
+                                <span className="ml-1 px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">✓</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <span className="font-semibold text-gray-800">{row.totalOrders}</span>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+                              {row.commissionable}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-800">
+                              {row.merged}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <div>
+                              <span className="font-bold text-blue-600">{row.monthRevenue.toFixed(2)} DT</span>
+                              <p className="text-xs text-gray-400">{row.monthCommissionable} cmd</p>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <span className="text-lg font-bold text-amber-600">{row.revenue.toFixed(2)} DT</span>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={7} className="px-6 py-12 text-center text-gray-400">
+                          Aucun fournisseur trouvé
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                  {sortedSupplierRevenue.length > 0 && (
+                    <tfoot>
+                      <tr className="bg-gradient-to-r from-amber-50 to-orange-50 border-t-2 border-amber-300">
+                        <td className="px-6 py-4"></td>
+                        <td className="px-6 py-4 font-bold text-gray-900 text-sm">TOTAL ({suppliers.length} fournisseurs)</td>
+                        <td className="px-6 py-4 text-center font-bold text-gray-900">
+                          {supplierRevenueData.reduce((s, r) => s + r.totalOrders, 0)}
+                        </td>
+                        <td className="px-6 py-4 text-center font-bold text-green-700">
+                          {totalCommissionableOrders}
+                        </td>
+                        <td className="px-6 py-4 text-center font-bold text-orange-700">
+                          {supplierRevenueData.reduce((s, r) => s + r.merged, 0)}
+                        </td>
+                        <td className="px-6 py-4 text-center font-bold text-blue-700">
+                          {totalMonthRevenue.toFixed(2)} DT
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <span className="text-2xl font-bold text-amber-600">{totalHanoutikRevenue.toFixed(2)} DT</span>
+                        </td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
               </div>
             </div>
           </div>

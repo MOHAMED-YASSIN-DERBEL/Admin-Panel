@@ -1,170 +1,128 @@
 import { NavLink, Link, useLocation } from "react-router-dom";
-import { FaBoxArchive, FaCircleUser, FaUsers, FaComment, FaHandshake, FaArrowRightFromBracket, FaGauge, FaBars, FaXmark } from "react-icons/fa6";
-import { useState, useEffect } from "react";
+import { FaBoxArchive, FaCircleUser, FaUsers, FaComment, FaHandshake, FaArrowRightFromBracket, FaGauge, FaBars, FaXmark, FaBox } from "react-icons/fa6";
+import { useState, useEffect, useCallback, useMemo, memo } from "react";
 
-export default function SideBar() {
+const NAV_ITEMS = [
+  { to: "/home", icon: FaGauge, label: "Tableau de Bord" },
+  { to: "/pending-products", icon: FaBoxArchive, label: "Produits en attente" },
+  { to: "/users", icon: FaUsers, label: "Utilisateurs" },
+  { to: "/products", icon: FaBox, label: "Tous Les Produits" },
+  { to: "/partners", icon: FaHandshake, label: "Partenaires" },
+  { to: "/feedback", icon: FaComment, label: "Avis" },
+];
+
+const NavItem = memo(function NavItem({ to, icon: Icon, label, onClick }) {
+  return (
+    <li>
+      <NavLink
+        to={to}
+        onClick={onClick}
+        className={({ isActive }) =>
+          `flex items-center px-4 py-3 mx-2 rounded-xl text-white/90 hover:bg-white/10 hover:text-white transition-all duration-200 group ${
+            isActive ? "bg-white/15 text-white shadow-sm" : ""
+          }`
+        }
+      >
+        <Icon className="w-5 h-5 flex-shrink-0 group-hover:scale-110 transition-transform duration-200" />
+        <span className="ml-3 text-sm font-medium">{label}</span>
+      </NavLink>
+    </li>
+  );
+});
+
+const SideBar = memo(function SideBar() {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
 
-  // Fermer la sidebar automatiquement lors du changement de route
   useEffect(() => {
     setIsOpen(false);
   }, [location.pathname]);
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     localStorage.removeItem("token");
     window.location.href = "/login";
-  };
+  }, []);
 
-  const handleLinkClick = () => {
-    // Sur mobile, fermer la sidebar après le clic
+  const handleLinkClick = useCallback(() => {
     setIsOpen(false);
-  };
+  }, []);
+
+  const toggleSidebar = useCallback(() => {
+    setIsOpen((prev) => !prev);
+  }, []);
+
+  const closeSidebar = useCallback(() => {
+    setIsOpen(false);
+  }, []);
 
   return (
     <>
-      {/* Bouton hamburger - toujours visible sur tous les écrans */}
+      {/* Hamburger - mobile only */}
       <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="fixed top-4 left-4 z-[60] bg-[#1E3A8A] text-white p-3 rounded-xl shadow-lg hover:bg-[#D4AF37] transition-all duration-300"
+        onClick={toggleSidebar}
+        className="lg:hidden fixed top-4 left-4 z-[60] bg-[#1E3A8A] text-white p-2.5 rounded-xl shadow-lg hover:bg-[#2D4A9E] transition-all duration-200"
+        aria-label="Menu"
       >
-        {isOpen ? <FaXmark className="w-6 h-6" /> : <FaBars className="w-6 h-6" />}
+        {isOpen ? <FaXmark className="w-5 h-5" /> : <FaBars className="w-5 h-5" />}
       </button>
 
-      {/* Overlay pour fermer la sidebar */}
+      {/* Overlay - mobile only */}
       {isOpen && (
         <div
-          onClick={() => setIsOpen(false)}
-          className="fixed inset-0 bg-black/50 z-40 backdrop-blur-sm"
+          onClick={closeSidebar}
+          className="lg:hidden fixed inset-0 bg-black/40 z-40 backdrop-blur-sm"
         />
       )}
 
-      {/* Sidebar - cachée par défaut sur tous les écrans */}
-      <div className={`w-64 bg-gradient-to-b from-[#1E3A8A] to-[#3B82F6] text-white shadow-2xl h-screen fixed left-0 top-0 flex flex-col z-50 transition-transform duration-300 ease-in-out ${
-        isOpen ? "translate-x-0" : "-translate-x-full"
-      }`}>
-      <div className="p-6 border-b border-blue-800/50">
-        <Link to="/home" className="flex items-center space-x-3 group"> {/* 👈 Changé de "/" à "/home" */}
-          <FaCircleUser className="w-8 h-8 text-[#D4AF37] group-hover:scale-110 transition-transform duration-300" />
-          <h1 className="text-2xl font-semibold tracking-wide text-[#F9FAFB] group-hover:text-[#D4AF37] transition-colors duration-300">
-            Admin Panel
-          </h1>
-        </Link>
-      </div>
-      <nav className="mt-4 flex-1 overflow-y-auto">
-        <ul className="space-y-2">
-          <li>
-            <NavLink
-              to="/home"
-              onClick={handleLinkClick}
-              className={({ isActive }) =>
-                `flex items-center px-4 py-3 text-white hover:bg-blue-600 hover:rounded-r-full transition-all duration-300 group ${
-                  isActive ? "bg-blue-600 rounded-r-full shadow-lg" : ""
-                }`
-              }
-            >
-              <FaGauge className="w-6 h-6 group-hover:scale-110 transition-transform duration-300" />
-              <span className="ml-4 text-lg font-medium group-hover:text-[#D4AF37] transition-colors duration-300">
-                Tableau de Bord
-              </span>
-            </NavLink>
-          </li>
-          <li>
-            <NavLink
-              to="/pending-products"
-              onClick={handleLinkClick}
-              className={({ isActive }) =>
-                `flex items-center px-4 py-3 text-white hover:bg-blue-600 hover:rounded-r-full transition-all duration-300 group ${
-                  isActive ? "bg-blue-600 rounded-r-full shadow-lg" : ""
-                }`
-              }
-            >
-              <FaBoxArchive className="w-6 h-6 group-hover:scale-110 transition-transform duration-300" />
-              <span className="ml-4 text-lg font-medium group-hover:text-[#D4AF37] transition-colors duration-300">
-                Produits en attente
-              </span>
-            </NavLink>
-          </li>
-          <li>
-            <NavLink
-              to="/users"
-              onClick={handleLinkClick}
-              className={({ isActive }) =>
-                `flex items-center px-4 py-3 text-white hover:bg-blue-600 hover:rounded-r-full transition-all duration-300 group ${
-                  isActive ? "bg-blue-600 rounded-r-full shadow-lg" : ""
-                }`
-              }
-            >
-              <FaUsers className="w-6 h-6 group-hover:scale-110 transition-transform duration-300" />
-              <span className="ml-4 text-lg font-medium group-hover:text-[#D4AF37] transition-colors duration-300">
-                Utilisateurs
-              </span>
-            </NavLink>
-          </li>
-          <li>
-            <NavLink
-              to="/products"
-              onClick={handleLinkClick}
-              className={({ isActive }) =>
-                `flex items-center px-4 py-3 text-white hover:bg-blue-600 hover:rounded-r-full transition-all duration-300 group ${
-                  isActive ? "bg-blue-600 rounded-r-full shadow-lg" : ""
-                }`
-              }
-            >
-              <FaBoxArchive className="w-6 h-6 group-hover:scale-110 transition-transform duration-300" />
-              <span className="ml-4 text-lg font-medium group-hover:text-[#D4AF37] transition-colors duration-300">
-                Tous Les Produits
-              </span>
-            </NavLink>
-          </li>
-          <li>
-            <NavLink
-              to="/partners"
-              onClick={handleLinkClick}
-              className={({ isActive }) =>
-                `flex items-center px-4 py-3 text-white hover:bg-blue-600 hover:rounded-r-full transition-all duration-300 group ${
-                  isActive ? "bg-blue-600 rounded-r-full shadow-lg" : ""
-                }`
-              }
-            >
-              <FaHandshake className="w-6 h-6 group-hover:scale-110 transition-transform duration-300" />
-              <span className="ml-4 text-lg font-medium group-hover:text-[#D4AF37] transition-colors duration-300">
-                Partenaires
-              </span>
-            </NavLink>
-          </li>
-          <li>
-            <NavLink
-              to="/feedback"
-              onClick={handleLinkClick}
-              className={({ isActive }) =>
-                `flex items-center px-4 py-3 text-white hover:bg-blue-600 hover:rounded-r-full transition-all duration-300 group ${
-                  isActive ? "bg-blue-600 rounded-r-full shadow-lg" : ""
-                }`
-              }
-            >
-              <FaComment className="w-6 h-6 group-hover:scale-110 transition-transform duration-300" />
-              <span className="ml-4 text-lg font-medium group-hover:text-[#D4AF37] transition-colors duration-300">
-                Avis
-              </span>
-            </NavLink>
-          </li>
-        </ul>
-      </nav>
+      {/* Sidebar */}
+      <aside
+        className={`w-64 bg-gradient-to-b from-[#0F2557] via-[#1E3A8A] to-[#2D4A9E] text-white h-screen fixed left-0 top-0 flex flex-col z-50 transition-transform duration-300 ease-in-out shadow-2xl ${
+          isOpen ? "translate-x-0" : "-translate-x-full"
+        } lg:translate-x-0`}
+      >
+        {/* Logo */}
+        <div className="p-5 border-b border-white/10">
+          <Link to="/home" className="flex items-center gap-3 group">
+            <div className="bg-[#D4AF37] p-2 rounded-lg group-hover:scale-105 transition-transform duration-200">
+              <FaCircleUser className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold tracking-wide text-white">
+                Hanoutik
+              </h1>
+              <p className="text-[10px] text-white/50 font-medium uppercase tracking-wider">Admin Panel</p>
+            </div>
+          </Link>
+        </div>
 
-      {/* Logout Button */}
-      <div className="p-4 border-t border-blue-800/50">
-        <button
-          onClick={handleLogout}
-          className="w-full flex items-center px-4 py-3 text-white bg-red-600/20 hover:bg-red-600 rounded-xl transition-all duration-300 group"
-        >
-          <FaArrowRightFromBracket className="w-6 h-6 group-hover:scale-110 transition-transform duration-300" />
-          <span className="ml-4 text-lg font-medium">
-            Déconnexion
-          </span>
-        </button>
-      </div>
-    </div>
+        {/* Navigation */}
+        <nav className="mt-4 flex-1 overflow-y-auto custom-scrollbar">
+          <ul className="space-y-1 pb-4">
+            {NAV_ITEMS.map((item) => (
+              <NavItem
+                key={item.to}
+                to={item.to}
+                icon={item.icon}
+                label={item.label}
+                onClick={handleLinkClick}
+              />
+            ))}
+          </ul>
+        </nav>
+
+        {/* Logout */}
+        <div className="p-4 border-t border-white/10">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center px-4 py-3 text-white/80 bg-red-500/10 hover:bg-red-500/25 hover:text-white rounded-xl transition-all duration-200 group"
+          >
+            <FaArrowRightFromBracket className="w-5 h-5 group-hover:scale-110 transition-transform duration-200" />
+            <span className="ml-3 text-sm font-medium">Déconnexion</span>
+          </button>
+        </div>
+      </aside>
     </>
   );
-}
+});
+
+export default SideBar;
